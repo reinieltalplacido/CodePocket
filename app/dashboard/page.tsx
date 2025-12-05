@@ -123,8 +123,13 @@ export default function DashboardPage() {
 }
 
 function SnippetCard({ snippet }: { snippet: Snippet }) {
+  const router = useRouter();
+  
   return (
-    <div className="group rounded-lg border border-white/10 bg-white/5 p-4 transition-all hover:border-emerald-500/30 hover:bg-white/10">
+    <div
+      onClick={() => router.push(`/dashboard/snippet/${snippet.id}`)}
+      className="group cursor-pointer rounded-lg border border-white/10 bg-white/5 p-4 transition-all hover:border-emerald-500/30 hover:bg-white/10"
+    >
       <div className="mb-2 flex items-start justify-between">
         <h3 className="font-medium text-slate-100">{snippet.title}</h3>
         <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
@@ -145,3 +150,4 @@ function SnippetCard({ snippet }: { snippet: Snippet }) {
     </div>
   );
 }
+

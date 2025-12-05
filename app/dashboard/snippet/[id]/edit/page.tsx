@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, FormEvent, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, FormEvent, useEffect, useRef } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 import Toast from "@/components/Toast";
+import ConfirmModal from "@/components/ConfirmModal";
 import { FiArrowLeft } from "react-icons/fi";
 
 const LANGUAGES = [
@@ -32,8 +33,11 @@ type Folder = {
   color: string;
 };
 
-export default function NewSnippetPage() {
+export default function EditSnippetPage() {
   const router = useRouter();
+  const params = useParams();
+  const id = params.id as string;
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [code, setCode] = useState("");
@@ -41,7 +45,10 @@ export default function NewSnippetPage() {
   const [folderId, setFolderId] = useState<string>("");
   const [tagsInput, setTagsInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fetchingLoading, setFetchingLoading] = useState(true);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   const [toast, setToast] = useState<{
     show: boolean;
     message: string;
@@ -50,10 +57,32 @@ export default function NewSnippetPage() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const originalDataRef = useRef({
+    title: "",
+    description: "",
+    code: "",
+    language: "",
+    folderId: "",
+    tagsInput: "",
+  });
 
   useEffect(() => {
     fetchFolders();
-  }, []);
+    fetchSnippet();
+  }, [id]);
+
+  useEffect(() => {
+    // Check if any field has changed
+    const changed =
+      title !== originalDataRef.current.title ||
+      description !== originalDataRef.current.description ||
+      code !== originalDataRef.current.code ||
+      language !== originalDataRef.current.language ||
+      folderId !== originalDataRef.current.folderId ||
+      tagsInput !== originalDataRef.current.tagsInput;
+
+    setHasChanges(changed);
+  }, [title, description, code, language, folderId, tagsInput]);
 
   const fetchFolders = async () => {
     const {
@@ -73,6 +102,42 @@ export default function NewSnippetPage() {
     }
   };
 
+  const fetchSnippet = async () => {
+    setFetchingLoading(true);
+    const { data, error } = await supabase
+      .from("snippets")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (!error && data) {
+      const titleData = data.title;
+      const descData = data.description || "";
+      const codeData = data.code;
+      const langData = data.language;
+      const folderData = data.folder_id || "";
+      const tagsData = data.tags?.join(", ") || "";
+
+      setTitle(titleData);
+      setDescription(descData);
+      setCode(codeData);
+      setLanguage(langData);
+      setFolderId(folderData);
+      setTagsInput(tagsData);
+
+      // Store original data
+      originalDataRef.current = {
+        title: titleData,
+        description: descData,
+        code: codeData,
+        language: langData,
+        folderId: folderData,
+        tagsInput: tagsData,
+      };
+    }
+    setFetchingLoading(false);
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -87,29 +152,22 @@ export default function NewSnippetPage() {
 
     setLoading(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
     const tags = tagsInput
       .split(",")
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
 
-    const { error } = await supabase.from("snippets").insert({
-      user_id: user.id,
-      title: title.trim(),
-      description: description.trim() || null,
-      code: code.trim(),
-      language,
-      folder_id: folderId || null,
-      tags,
-    });
+    const { error } = await supabase
+      .from("snippets")
+      .update({
+        title: title.trim(),
+        description: description.trim() || null,
+        code: code.trim(),
+        language,
+        folder_id: folderId || null,
+        tags,
+      })
+      .eq("id", id);
 
     setLoading(false);
 
@@ -124,23 +182,43 @@ export default function NewSnippetPage() {
 
     setToast({
       show: true,
-      message: "Snippet created successfully!",
+      message: "Snippet updated successfully!",
       type: "success",
     });
 
     setTimeout(() => {
-      router.push("/dashboard");
+      router.replace(`/dashboard/snippet/${id}`);
     }, 1000);
+  };
+
+  const handleCancel = () => {
+    if (hasChanges) {
+      setShowCancelConfirm(true);
+    } else {
+      router.back();
+    }
+  };
+
+  const confirmCancel = () => {
+    setShowCancelConfirm(false);
+    router.back();
   };
 
   const lines = code.split("\n").length;
 
-  // Sync scroll between textarea and line numbers
   const handleScroll = () => {
     if (textareaRef.current && lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
     }
   };
+
+  if (fetchingLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-sm text-slate-400">Loading snippet...</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -148,13 +226,13 @@ export default function NewSnippetPage() {
         {/* Header */}
         <div className="mb-6 flex items-center gap-3">
           <button
-            onClick={() => router.back()}
+            onClick={handleCancel}
             className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-100"
           >
             <FiArrowLeft className="h-5 w-5" />
           </button>
           <h1 className="text-2xl font-semibold text-slate-100">
-            Add New Snippet
+            Edit Snippet
           </h1>
         </div>
 
@@ -280,17 +358,35 @@ export default function NewSnippetPage() {
           </div>
 
           {/* Submit Button */}
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="rounded-lg border border-white/10 px-6 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={loading}
               className="flex items-center gap-2 rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Creating..." : "Create Snippet"}
+              {loading ? "Saving..." : "Save Changes"}
             </button>
           </div>
         </form>
       </div>
+
+      <ConfirmModal
+        isOpen={showCancelConfirm}
+        title="Discard Changes?"
+        message="You have unsaved changes. Are you sure you want to leave without saving?"
+        confirmText="Discard"
+        cancelText="Keep Editing"
+        variant="warning"
+        onConfirm={confirmCancel}
+        onCancel={() => setShowCancelConfirm(false)}
+      />
 
       <Toast
         message={toast.message}

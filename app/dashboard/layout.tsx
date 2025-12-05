@@ -2,9 +2,10 @@
 "use client";
 
 import { useState, useEffect, useRef, ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 import ProfileModal from "@/components/ProfileModal";
+import AddFolderModal from "@/components/AddFolderModal";
 import {
   FiChevronLeft,
   FiChevronRight,
@@ -13,12 +14,70 @@ import {
   FiUser,
   FiLogOut,
   FiChevronDown,
+  FiFolder,
+  FiPlus,
 } from "react-icons/fi";
+
+type Folder = {
+  id: string;
+  name: string;
+  color: string;
+  snippet_count?: number;
+};
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    fetchFolders();
+  }, []);
+
+  const fetchFolders = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const { data: foldersData } = await supabase
+      .from("folders")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (foldersData) {
+      // Get snippet count for each folder
+      const foldersWithCount = await Promise.all(
+        foldersData.map(async (folder) => {
+          const { count } = await supabase
+            .from("snippets")
+            .select("*", { count: "exact", head: true })
+            .eq("folder_id", folder.id);
+
+          return { ...folder, snippet_count: count || 0 };
+        })
+      );
+
+      setFolders(foldersWithCount);
+    }
+  };
+
+  const getColorClass = (color: string) => {
+    const colors: Record<string, string> = {
+      emerald: "bg-emerald-500",
+      blue: "bg-blue-500",
+      purple: "bg-purple-500",
+      pink: "bg-pink-500",
+      orange: "bg-orange-500",
+      red: "bg-red-500",
+    };
+    return colors[color] || colors.emerald;
+  };
 
   return (
     <div className="flex min-h-screen bg-black text-slate-50">
@@ -42,7 +101,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         {/* Logo */}
         <div className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/20">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/20">
             <span className="text-base font-bold text-white">CP</span>
           </div>
           {!collapsed && (
@@ -53,20 +112,78 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-0.5 px-2 py-4">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4">
           <SidebarItem
             icon={<FiCode className="h-5 w-5" />}
             label="All Snippets"
             collapsed={collapsed}
-            active
+            active={pathname === "/dashboard"}
             onClick={() => router.push("/dashboard")}
           />
           <SidebarItem
             icon={<FiStar className="h-5 w-5" />}
             label="Favorites"
             collapsed={collapsed}
+            active={pathname === "/dashboard/favorites"}
             onClick={() => router.push("/dashboard/favorites")}
           />
+
+          {/* Folders Section */}
+          {!collapsed && (
+            <>
+              <div className="mb-2 mt-6 flex items-center justify-between px-3">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Folders
+                </span>
+                <button
+                  onClick={() => setShowFolderModal(true)}
+                  className="rounded p-1 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
+                  title="New Folder"
+                >
+                  <FiPlus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {folders.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-slate-500">
+                  No folders yet
+                </div>
+              ) : (
+                folders.map((folder) => (
+                  <button
+                    key={folder.id}
+                    onClick={() => router.push(`/dashboard/folder/${folder.id}`)}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                      pathname === `/dashboard/folder/${folder.id}`
+                        ? "bg-white/5 text-emerald-400"
+                        : "text-slate-300 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    <div
+                      className={`h-2 w-2 shrink-0 rounded-full ${getColorClass(
+                        folder.color
+                      )}`}
+                    />
+                    <span className="flex-1 truncate text-left">{folder.name}</span>
+                    {folder.snippet_count! > 0 && (
+                      <span className="text-xs text-slate-500">
+                        {folder.snippet_count}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </>
+          )}
+
+          {collapsed && folders.length > 0 && (
+            <SidebarItem
+              icon={<FiFolder className="h-5 w-5" />}
+              label="Folders"
+              collapsed={collapsed}
+              onClick={() => setCollapsed(false)}
+            />
+          )}
         </nav>
       </aside>
 
@@ -90,6 +207,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <ProfileModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
+      />
+
+      {/* Add Folder Modal */}
+      <AddFolderModal
+        isOpen={showFolderModal}
+        onClose={() => setShowFolderModal(false)}
+        onSuccess={() => {
+          setShowFolderModal(false);
+          fetchFolders();
+        }}
       />
     </div>
   );

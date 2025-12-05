@@ -1,20 +1,31 @@
-// components/ProfileModal.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase-client";
 import Modal from "@/components/Modal";
 import Toast from "@/components/Toast";
+import { FiCopy, FiTrash2, FiPlus, FiEye, FiEyeOff, FiCheck } from "react-icons/fi";
 
 type ProfileModalProps = {
   isOpen: boolean;
   onClose: () => void;
 };
 
+type ApiKey = {
+  id: string;
+  name: string;
+  api_key: string;
+  created_at: string;
+};
+
 export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [showNewKeyForm, setShowNewKeyForm] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [toast, setToast] = useState<{
     show: boolean;
     message: string;
@@ -23,27 +34,74 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
 
   useEffect(() => {
     if (isOpen) {
-      const fetchUser = async () => {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          setEmail(user.email || "");
-          setDisplayName(user.user_metadata?.display_name || "");
-        }
-      };
-      fetchUser();
+      fetchUserData();
+      fetchApiKeys();
     }
   }, [isOpen]);
 
-  const handleSave = async () => {
-    setLoading(true);
+  const fetchUserData = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      setEmail(user.email || "");
+    }
+  };
 
-    const { error } = await supabase.auth.updateUser({
-      data: { display_name: displayName },
+  const fetchApiKeys = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("api_keys")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (data) {
+      setApiKeys(data);
+    }
+  };
+
+  const generateApiKey = () => {
+    return `cpk_${Math.random().toString(36).substring(2, 15)}${Math.random()
+      .toString(36)
+      .substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
+  };
+
+  const handleCreateApiKey = async () => {
+    if (!newKeyName.trim()) {
+      setToast({
+        show: true,
+        message: "Please enter a key name",
+        type: "error",
+      });
+      return;
+    }
+
+    setCreatingKey(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setCreatingKey(false);
+      return;
+    }
+
+    const apiKey = generateApiKey();
+
+    const { error } = await supabase.from("api_keys").insert({
+      user_id: user.id,
+      name: newKeyName.trim(),
+      api_key: apiKey,
     });
 
-    setLoading(false);
+    setCreatingKey(false);
 
     if (error) {
       setToast({
@@ -56,19 +114,60 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
 
     setToast({
       show: true,
-      message: "Profile updated successfully!",
+      message: "API key created successfully!",
       type: "success",
     });
 
-    setTimeout(() => {
-      onClose();
-    }, 1500);
+    setNewKeyName("");
+    setShowNewKeyForm(false);
+    fetchApiKeys();
+  };
+
+  const handleDeleteApiKey = async (id: string) => {
+    const { error } = await supabase.from("api_keys").delete().eq("id", id);
+
+    if (error) {
+      setToast({
+        show: true,
+        message: error.message,
+        type: "error",
+      });
+      return;
+    }
+
+    setToast({
+      show: true,
+      message: "API key deleted",
+      type: "success",
+    });
+
+    fetchApiKeys();
+  };
+
+  const handleCopyKey = (key: string, id: string) => {
+    navigator.clipboard.writeText(key);
+    setCopiedKey(id);
+    setToast({
+      show: true,
+      message: "API key copied to clipboard!",
+      type: "success",
+    });
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const toggleKeyVisibility = (id: string) => {
+    setVisibleKeys((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const maskKey = (key: string) => {
+    return key.substring(0, 10) + "•••••••••••••••••••";
   };
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={onClose} title="Profile Settings" size="md">
-        <div className="space-y-4">
+      <Modal isOpen={isOpen} onClose={onClose} title="Profile Settings" size="lg">
+        <div className="space-y-6">
+          {/* User Info */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-300">
               Email
@@ -76,41 +175,126 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             <input
               type="email"
               value={email}
-              disabled
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-400 outline-none"
+              readOnly
+              className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-slate-400 outline-none"
             />
-            <p className="mt-1 text-xs text-slate-500">
-              Email cannot be changed
-            </p>
           </div>
 
+          {/* API Keys Section */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-300">
-              Display Name
-            </label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Enter your name"
-              className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/60 focus:border-emerald-500 focus:ring-2"
-            />
-          </div>
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-100">API Keys</h3>
+                <p className="text-xs text-slate-500">
+                  For VS Code extension and integrations
+                </p>
+              </div>
+              {!showNewKeyForm && (
+                <button
+                  onClick={() => setShowNewKeyForm(true)}
+                  className="flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-emerald-400"
+                >
+                  <FiPlus className="h-3 w-3" />
+                  New Key
+                </button>
+              )}
+            </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <button
-              onClick={onClose}
-              className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={loading}
-              className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "Saving..." : "Save Changes"}
-            </button>
+            {/* New Key Form */}
+            {showNewKeyForm && (
+              <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-4">
+                <label className="mb-1.5 block text-xs font-medium text-slate-300">
+                  Key Name
+                </label>
+                <input
+                  type="text"
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  placeholder="e.g., VS Code Extension"
+                  className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
+                />
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={handleCreateApiKey}
+                    disabled={creatingKey}
+                    className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-emerald-400 disabled:opacity-50"
+                  >
+                    {creatingKey ? "Creating..." : "Create Key"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowNewKeyForm(false);
+                      setNewKeyName("");
+                    }}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-white/5"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* API Keys List */}
+            {apiKeys.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-white/10 p-6 text-center">
+                <p className="text-sm text-slate-400">No API keys yet</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Create one to use with VS Code extension
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {apiKeys.map((key) => (
+                  <div
+                    key={key.id}
+                    className="rounded-lg border border-white/10 bg-white/5 p-3"
+                  >
+                    <div className="mb-2 flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-slate-100">
+                          {key.name}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Created {new Date(key.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteApiKey(key.id)}
+                        className="rounded p-1 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                      >
+                        <FiTrash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 rounded bg-black px-2 py-1.5 font-mono text-xs text-slate-300">
+                        {visibleKeys[key.id] ? key.api_key : maskKey(key.api_key)}
+                      </code>
+
+                      <button
+                        onClick={() => toggleKeyVisibility(key.id)}
+                        className="rounded p-1.5 text-slate-400 transition-colors hover:bg-white/5"
+                      >
+                        {visibleKeys[key.id] ? (
+                          <FiEyeOff className="h-4 w-4" />
+                        ) : (
+                          <FiEye className="h-4 w-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleCopyKey(key.api_key, key.id)}
+                        className="rounded p-1.5 text-slate-400 transition-colors hover:bg-white/5"
+                      >
+                        {copiedKey === key.id ? (
+                          <FiCheck className="h-4 w-4 text-emerald-400" />
+                        ) : (
+                          <FiCopy className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </Modal>
