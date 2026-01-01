@@ -4,7 +4,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import { FiPlus, FiSearch, FiCode } from "react-icons/fi";
+import { FiPlus, FiSearch, FiCode, FiCopy, FiTrash2 } from "react-icons/fi";
+import Toast from "@/components/Toast";
 
 type Snippet = {
   id: string;
@@ -12,18 +13,95 @@ type Snippet = {
   description: string | null;
   code: string;
   language: string;
-  tags: string[];
+  tags: string[] | null;
   created_at: string;
+  folder_id: string | null;
+  source?: string | null;
+  folders?: {
+    id: string;
+    name: string;
+    color: string;
+  } | null;
 };
+
+function prettyLanguage(id: string | undefined): string {
+  if (!id) return "Unknown";
+
+  switch (id) {
+    case "javascript":
+      return "JavaScript";
+    case "typescript":
+      return "TypeScript";
+    case "javascriptreact":
+      return "JSX";
+    case "typescriptreact":
+      return "TSX";
+    case "json":
+      return "JSON";
+    case "plaintext":
+      return "Plain text";
+    default:
+      return id.charAt(0).toUpperCase() + id.slice(1);
+  }
+}
 
 export default function DashboardPage() {
   const router = useRouter();
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [snippetToDelete, setSnippetToDelete] = useState<Snippet | null>(null);
+  const [toast, setToast] = useState<{
+    show: boolean;
+    message: string;
+    type: "success" | "error" | "info";
+  }>({ show: false, message: "", type: "info" });
 
   useEffect(() => {
     fetchSnippets();
+  }, []);
+
+  // realtime inserts/deletes/updates
+  useEffect(() => {
+    const channel = supabase
+      .channel("snippets-dashboard")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "snippets" },
+        (payload) => {
+          setSnippets((prev) => [
+            payload.new as Snippet,
+            ...prev.filter((s) => s.id !== (payload.new as any).id),
+          ]);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "snippets" },
+        (payload) => {
+          // If snippet was soft deleted (deleted_at is not null), remove from list
+          if ((payload.new as any).deleted_at !== null) {
+            setSnippets((prev) =>
+              prev.filter((s) => s.id !== (payload.new as any).id)
+            );
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "snippets" },
+        (payload) => {
+          setSnippets((prev) =>
+            prev.filter((s) => s.id !== (payload.old as any).id)
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchSnippets = async () => {
@@ -32,16 +110,27 @@ export default function DashboardPage() {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     const { data, error } = await supabase
       .from("snippets")
-      .select("*")
+      .select(`
+        *,
+        folders (
+          id,
+          name,
+          color
+        )
+      `)
       .eq("user_id", user.id)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      setSnippets(data);
+      setSnippets(data as Snippet[]);
     }
     setLoading(false);
   };
@@ -51,6 +140,46 @@ export default function DashboardPage() {
       s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.code.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const openConfirm = (snippet: Snippet) => {
+    setSnippetToDelete(snippet);
+    setConfirmOpen(true);
+  };
+
+  const closeConfirm = () => {
+    setConfirmOpen(false);
+    setSnippetToDelete(null);
+  };
+
+  const confirmDelete = async () => {
+  if (!snippetToDelete) return;
+
+  const snippetTitle = snippetToDelete.title;
+
+  // Soft delete: set deleted_at to current timestamp
+  const { error } = await supabase
+    .from("snippets")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", snippetToDelete.id);
+
+  if (error) {
+    console.error(error);
+    setToast({
+      show: true,
+      message: "Failed to archive snippet",
+      type: "error",
+    });
+  } else {
+    setToast({
+      show: true,
+      message: `"${snippetTitle}" moved to Archive`,
+      type: "success",
+    });
+  }
+
+  closeConfirm(); // modal closes; realtime will update list
+};
+
 
   return (
     <div className="space-y-6">
@@ -114,40 +243,160 @@ export default function DashboardPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredSnippets.map((snippet) => (
-            <SnippetCard key={snippet.id} snippet={snippet} />
+            <SnippetCard
+              key={snippet.id}
+              snippet={snippet}
+              onRequestDelete={openConfirm}
+            />
           ))}
         </div>
       )}
-    </div>
-  );
-}
 
-function SnippetCard({ snippet }: { snippet: Snippet }) {
-  const router = useRouter();
-  
-  return (
-    <div
-      onClick={() => router.push(`/dashboard/snippet/${snippet.id}`)}
-      className="group cursor-pointer rounded-lg border border-white/10 bg-white/5 p-4 transition-all hover:border-emerald-500/30 hover:bg-white/10"
-    >
-      <div className="mb-2 flex items-start justify-between">
-        <h3 className="font-medium text-slate-100">{snippet.title}</h3>
-        <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
-          {snippet.language}
-        </span>
-      </div>
-      {snippet.description && (
-        <p className="mb-3 line-clamp-2 text-xs text-slate-400">
-          {snippet.description}
-        </p>
+      {/* Confirm delete modal */}
+      {confirmOpen && snippetToDelete && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-sm rounded-lg border border-white/10 bg-zinc-950 p-5 shadow-xl">
+            <h2 className="text-sm font-semibold text-slate-100">
+              Archive snippet
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Are you sure you want to archive{" "}
+              <span className="font-semibold text-slate-100">
+                {snippetToDelete.title}
+              </span>
+              ? You can restore it from the Archive later.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={closeConfirm}
+                className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-amber-400"
+              >
+                Archive
+              </button>
+            </div>
+          </div>
+        </div>
       )}
-      <pre className="mb-3 overflow-hidden rounded bg-black/50 p-2 text-xs text-slate-300">
-        <code className="line-clamp-3">{snippet.code}</code>
-      </pre>
-      <div className="text-xs text-slate-500">
-        {new Date(snippet.created_at).toLocaleDateString()}
-      </div>
+
+      {/* Toast notification */}
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.show}
+        onClose={() => setToast({ ...toast, show: false })}
+      />
     </div>
   );
 }
 
+function SnippetCard({
+  snippet,
+  onRequestDelete,
+}: {
+  snippet: Snippet;
+  onRequestDelete: (snippet: Snippet) => void;
+}) {
+  const router = useRouter();
+  const tags = Array.isArray(snippet.tags) ? snippet.tags : [];
+
+  const handleOpen = () => {
+    router.push(`/dashboard/snippet/${snippet.id}`);
+  };
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(snippet.code);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRequestDelete(snippet);
+  };
+
+  return (
+    <div className="relative group">
+      {/* Icon actions pinned on top border, right side, only on hover */}
+      <div className="pointer-events-none absolute top-0 right-0 flex justify-end pr-4">
+        <div className="mt-[-0.6rem] flex gap-1 rounded-full bg-black/80 px-1.5 py-1 shadow-sm opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            onClick={handleCopy}
+            className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-xs text-slate-100 hover:bg-black"
+            title="Copy code"
+          >
+            <FiCopy className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={handleDeleteClick}
+            className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-xs text-red-400 hover:bg-red-500/20"
+            title="Delete snippet"
+          >
+            <FiTrash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div
+        onClick={handleOpen}
+        className="cursor-pointer rounded-lg border border-white/10 bg-white/5 p-4 pt-5 transition-all hover:border-emerald-500/30 hover:bg-white/10"
+      >
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div className="space-y-1">
+            <h3 className="font-medium text-slate-100 line-clamp-1">
+              {snippet.title}
+            </h3>
+
+            {/* Folder + tags row */}
+            <div className="flex flex-wrap gap-1 text-[11px] text-slate-400">
+              {snippet.folders && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5">
+                  <span className="text-xs">📁</span>
+                  <span>{snippet.folders.name}</span>
+                </span>
+              )}
+
+              {tags.slice(0, 2).map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5"
+                >
+                  <span className="text-xs">🏷️</span>
+                  <span>{tag}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end gap-1">
+            <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
+              {prettyLanguage(snippet.language)}
+            </span>
+
+            {snippet.source && (
+              <span className="rounded bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300">
+                {snippet.source === "vscode" ? "VS Code" : "Web"}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {snippet.description && (
+          <p className="mb-3 line-clamp-2 text-xs text-slate-400">
+            {snippet.description}
+          </p>
+        )}
+        <pre className="mb-3 overflow-hidden rounded bg-black/50 p-2 text-xs text-slate-300">
+          <code className="line-clamp-3">{snippet.code}</code>
+        </pre>
+        <div className="text-xs text-slate-500">
+          {new Date(snippet.created_at).toLocaleDateString()}
+        </div>
+      </div>
+    </div>
+  );
+}

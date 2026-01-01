@@ -62,6 +62,7 @@ export default function FolderPage() {
       .from("snippets")
       .select("*")
       .eq("folder_id", folderId)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
     if (data) {

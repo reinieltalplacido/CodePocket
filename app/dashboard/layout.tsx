@@ -16,6 +16,7 @@ import {
   FiChevronDown,
   FiFolder,
   FiPlus,
+  FiTrash2,
 } from "react-icons/fi";
 
 type Folder = {
@@ -126,6 +127,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             collapsed={collapsed}
             active={pathname === "/dashboard/favorites"}
             onClick={() => router.push("/dashboard/favorites")}
+          />
+          <SidebarItem
+            icon={<FiTrash2 className="h-5 w-5" />}
+            label="Archive"
+            collapsed={collapsed}
+            active={pathname === "/dashboard/archive"}
+            onClick={() => router.push("/dashboard/archive")}
           />
 
           {/* Folders Section */}

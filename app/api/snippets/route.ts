@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("snippets")
-    .select("*")
+    // include all fields you need on cards (add folder_name if you have it)
+    .select("id, title, code, language, description, tags, folder_id, source, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
@@ -41,4 +42,58 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ snippets: data });
+}
+
+// POST /api/snippets (used by VS Code and web)
+export async function POST(request: NextRequest) {
+  const apiKey = request.headers.get("x-api-key");
+
+  if (!apiKey) {
+    return NextResponse.json({ error: "API key required" }, { status: 401 });
+  }
+
+  const userId = await validateApiKey(apiKey);
+
+  if (!userId) {
+    return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const {
+    title,
+    code,
+    language,
+    description,
+    tags,
+    folder_id,
+    source = "web" // default when not provided
+  } = body;
+
+  if (!title || !code) {
+    return NextResponse.json(
+      { error: "Title and code are required" },
+      { status: 400 }
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("snippets")
+    .insert({
+      user_id: userId,
+      title,
+      code,
+      language,
+      description,
+      tags,
+      folder_id,
+      source
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ snippet: data }, { status: 201 });
 }
