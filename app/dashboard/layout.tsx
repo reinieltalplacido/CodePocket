@@ -6,6 +6,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 import ProfileModal from "@/components/ProfileModal";
 import AddFolderModal from "@/components/AddFolderModal";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import ThemeSelector from "@/components/ThemeSelector";
 import {
   FiChevronLeft,
   FiChevronRight,
@@ -81,7 +83,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-black text-slate-50">
+    <ThemeProvider>
+      <div className="flex min-h-screen bg-black text-slate-50">
       {/* Sidebar */}
       <aside
         className={`group relative flex flex-col border-r border-white/10 bg-black transition-all duration-300 ease-in-out ${
@@ -201,7 +204,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <header className="border-b border-white/10 bg-black">
           <div className="flex items-center justify-between px-6 py-3">
             <h1 className="text-lg font-semibold text-slate-100">Dashboard</h1>
-            <UserMenu onOpenProfile={() => setShowProfileModal(true)} />
+            <div className="flex items-center gap-3">
+              <ThemeSelector />
+              <UserMenu onOpenProfile={() => setShowProfileModal(true)} />
+            </div>
           </div>
         </header>
 
@@ -227,6 +233,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         }}
       />
     </div>
+    </ThemeProvider>
   );
 }
 
@@ -351,3 +358,4 @@ function UserMenu({ onOpenProfile }: { onOpenProfile: () => void }) {
     </div>
   );
 }
+

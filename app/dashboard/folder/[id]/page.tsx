@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import { FiArrowLeft, FiTrash2, FiPlus } from "react-icons/fi";
+import { FiArrowLeft, FiTrash2, FiPlus, FiStar } from "react-icons/fi";
 import ConfirmModal from "@/components/ConfirmModal";
 import Toast from "@/components/Toast";
+import CodeBlock from "@/components/CodeBlock";
 
 type Snippet = {
   id: string;
@@ -15,6 +16,7 @@ type Snippet = {
   language: string;
   tags: string[] | null;
   created_at: string;
+  is_favorite?: boolean;
 };
 
 type Folder = {
@@ -94,6 +96,42 @@ export default function FolderPage() {
     setTimeout(() => {
       router.push("/dashboard");
     }, 1000);
+  };
+
+  const toggleFavorite = async (snippet: Snippet) => {
+    const newFavoriteState = !snippet.is_favorite;
+
+    // Optimistic update
+    setSnippets((prev) =>
+      prev.map((s) =>
+        s.id === snippet.id ? { ...s, is_favorite: newFavoriteState } : s
+      )
+    );
+
+    const { error } = await supabase
+      .from("snippets")
+      .update({ is_favorite: newFavoriteState })
+      .eq("id", snippet.id);
+
+    if (error) {
+      // Revert on error
+      setSnippets((prev) =>
+        prev.map((s) =>
+          s.id === snippet.id ? { ...s, is_favorite: !newFavoriteState } : s
+        )
+      );
+      setToast({
+        show: true,
+        message: "Failed to update favorite",
+        type: "error",
+      });
+    } else {
+      setToast({
+        show: true,
+        message: newFavoriteState ? "Added to favorites" : "Removed from favorites",
+        type: "success",
+      });
+    }
   };
 
   const getColorClass = (color: string) => {
@@ -177,49 +215,11 @@ export default function FolderPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {snippets.map((snippet) => (
-              <div
+              <SnippetCard
                 key={snippet.id}
-                onClick={() => router.push(`/dashboard/snippet/${snippet.id}`)}
-                className="group cursor-pointer rounded-lg border border-white/10 bg-black p-4 transition-all hover:border-emerald-500/50 hover:bg-white/5"
-              >
-                <div className="mb-2 flex items-start justify-between">
-                  <h3 className="font-medium text-slate-100 group-hover:text-emerald-400">
-                    {snippet.title}
-                  </h3>
-                  <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
-                    {snippet.language}
-                  </span>
-                </div>
-
-                {snippet.description && (
-                  <p className="mb-3 line-clamp-2 text-xs text-slate-400">
-                    {snippet.description}
-                  </p>
-                )}
-
-                <div className="rounded bg-slate-950 p-2">
-                  <pre className="line-clamp-3 text-xs text-slate-300">
-                    {snippet.code}
-                  </pre>
-                </div>
-
-                {snippet.tags && snippet.tags.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {snippet.tags.slice(0, 3).map((tag, i) => (
-                      <span
-                        key={i}
-                        className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-500"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mt-3 text-xs text-slate-500">
-                  {new Date(snippet.created_at).toLocaleDateString()}
-                </div>
-              </div>
+                snippet={snippet}
+                onToggleFavorite={toggleFavorite}
+              />
             ))}
           </div>
         )}
@@ -245,3 +245,82 @@ export default function FolderPage() {
     </>
   );
 }
+
+function SnippetCard({
+  snippet,
+  onToggleFavorite,
+}: {
+  snippet: Snippet;
+  onToggleFavorite: (snippet: Snippet) => void;
+}) {
+  const router = useRouter();
+
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleFavorite(snippet);
+  };
+
+  return (
+    <div
+      onClick={() => router.push(`/dashboard/snippet/${snippet.id}`)}
+      className="group cursor-pointer rounded-lg border border-white/10 bg-black p-4 transition-all hover:border-emerald-500/50 hover:bg-white/5"
+    >
+      <div className="mb-2 flex items-start justify-between">
+        <div className="flex-1">
+          <h3 className="font-medium text-slate-100 group-hover:text-emerald-400">
+            {snippet.title}
+          </h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleFavoriteClick}
+            className="rounded p-1 transition-colors hover:bg-white/10"
+            title={snippet.is_favorite ? "Remove from favorites" : "Add to favorites"}
+          >
+            <FiStar
+              className={`h-4 w-4 ${
+                snippet.is_favorite
+                  ? "fill-yellow-400 text-yellow-400"
+                  : "text-slate-400 hover:text-slate-100"
+              }`}
+            />
+          </button>
+          <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
+            {snippet.language}
+          </span>
+        </div>
+      </div>
+
+      {snippet.description && (
+        <p className="mb-3 line-clamp-2 text-xs text-slate-400">
+          {snippet.description}
+        </p>
+      )}
+
+      <CodeBlock
+        code={snippet.code}
+        language={snippet.language}
+        showLineNumbers={false}
+        maxHeight="100px"
+      />
+
+      {snippet.tags && snippet.tags.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1">
+          {snippet.tags.slice(0, 3).map((tag, i) => (
+            <span
+              key={i}
+              className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-500"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 text-xs text-slate-500">
+        {new Date(snippet.created_at).toLocaleDateString()}
+      </div>
+    </div>
+  );
+}
+     

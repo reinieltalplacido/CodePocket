@@ -5,7 +5,8 @@ import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 import Toast from "@/components/Toast";
 import ConfirmModal from "@/components/ConfirmModal";
-import { FiArrowLeft, FiCopy, FiTrash2, FiEdit2, FiCheck } from "react-icons/fi";
+import CodeBlock from "@/components/CodeBlock";
+import { FiArrowLeft, FiCopy, FiTrash2, FiEdit2, FiCheck, FiStar } from "react-icons/fi";
 
 type Snippet = {
   id: string;
@@ -15,6 +16,7 @@ type Snippet = {
   language: string;
   tags: string[];
   created_at: string;
+  is_favorite?: boolean;
 };
 
 export default function SnippetDetailPage() {
@@ -91,6 +93,36 @@ export default function SnippetDetailPage() {
     }, 1000);
   };
 
+  const toggleFavorite = async () => {
+    if (!snippet) return;
+
+    const newFavoriteState = !snippet.is_favorite;
+
+    // Optimistic update
+    setSnippet({ ...snippet, is_favorite: newFavoriteState });
+
+    const { error } = await supabase
+      .from("snippets")
+      .update({ is_favorite: newFavoriteState })
+      .eq("id", id);
+
+    if (error) {
+      // Revert on error
+      setSnippet({ ...snippet, is_favorite: !newFavoriteState });
+      setToast({
+        show: true,
+        message: "Failed to update favorite",
+        type: "error",
+      });
+    } else {
+      setToast({
+        show: true,
+        message: newFavoriteState ? "Added to favorites" : "Removed from favorites",
+        type: "success",
+      });
+    }
+  };
+
   const handleScroll = () => {
     if (textareaRef.current && lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -145,6 +177,20 @@ export default function SnippetDetailPage() {
 
           <div className="flex items-center gap-2">
             <button
+              onClick={toggleFavorite}
+              className="flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5"
+              title={snippet.is_favorite ? "Remove from favorites" : "Add to favorites"}
+            >
+              <FiStar
+                className={`h-4 w-4 ${
+                  snippet.is_favorite
+                    ? "fill-yellow-400 text-yellow-400"
+                    : ""
+                }`}
+              />
+              {snippet.is_favorite ? "Favorited" : "Favorite"}
+            </button>
+            <button
               onClick={handleCopy}
               className="flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5"
             >
@@ -198,27 +244,12 @@ export default function SnippetDetailPage() {
           {/* Code */}
           <div>
             <h2 className="mb-2 text-sm font-medium text-slate-300">Code</h2>
-            <div className="flex rounded-lg border border-white/10 bg-[#020617] text-slate-100">
-              {/* Line numbers */}
-              <div
-                ref={lineNumbersRef}
-                className="max-h-[500px] select-none overflow-hidden border-r border-white/10 bg-black/60 px-3 py-3 text-right text-xs leading-6 text-slate-500"
-              >
-                {Array.from({ length: lines }).map((_, i) => (
-                  <div key={i}>{i + 1}</div>
-                ))}
-              </div>
-
-              {/* Code display */}
-              <textarea
-                ref={textareaRef}
-                value={snippet.code}
-                readOnly
-                onScroll={handleScroll}
-                className="custom-scrollbar font-mono max-h-[500px] w-full resize-none bg-transparent px-3 py-3 text-xs leading-6 text-slate-100 outline-none"
-                spellCheck={false}
-              />
-            </div>
+            <CodeBlock
+              code={snippet.code}
+              language={snippet.language}
+              showLineNumbers={true}
+              maxHeight="500px"
+            />
           </div>
 
           {/* Tags */}

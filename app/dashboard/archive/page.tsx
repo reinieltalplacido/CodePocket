@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import { FiTrash2, FiRotateCcw, FiAlertCircle } from "react-icons/fi";
+import { FiTrash2, FiRotateCcw, FiAlertCircle, FiStar } from "react-icons/fi";
 import Toast from "@/components/Toast";
+import CodeBlock from "@/components/CodeBlock";
 
 type Snippet = {
   id: string;
@@ -16,6 +17,7 @@ type Snippet = {
   created_at: string;
   deleted_at: string;
   folder_id: string | null;
+  is_favorite?: boolean;
   source?: string | null;
   folders?: {
     id: string;
@@ -159,6 +161,37 @@ export default function ArchivePage() {
     closeConfirm();
   };
 
+  const toggleFavorite = async (snippet: Snippet) => {
+    const newFavoriteState = !snippet.is_favorite;
+
+    // Optimistic update
+    setSnippets((prev) =>
+      prev.map((s) =>
+        s.id === snippet.id ? { ...s, is_favorite: newFavoriteState } : s
+      )
+    );
+
+    const { error } = await supabase
+      .from("snippets")
+      .update({ is_favorite: newFavoriteState })
+      .eq("id", snippet.id);
+
+    if (error) {
+      // Revert on error
+      setSnippets((prev) =>
+        prev.map((s) =>
+          s.id === snippet.id ? { ...s, is_favorite: !newFavoriteState } : s
+        )
+      );
+      showToast("Failed to update favorite", "error");
+    } else {
+      showToast(
+        newFavoriteState ? "Added to favorites" : "Removed from favorites",
+        "success"
+      );
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -205,6 +238,7 @@ export default function ArchivePage() {
               snippet={snippet}
               onRestore={openRestoreConfirm}
               onPermanentDelete={openConfirm}
+              onToggleFavorite={toggleFavorite}
             />
           ))}
         </div>
@@ -289,18 +323,38 @@ function ArchiveSnippetCard({
   snippet,
   onRestore,
   onPermanentDelete,
+  onToggleFavorite,
 }: {
   snippet: Snippet;
   onRestore: (snippet: Snippet) => void;
   onPermanentDelete: (snippet: Snippet) => void;
+  onToggleFavorite: (snippet: Snippet) => void;
 }) {
   const tags = Array.isArray(snippet.tags) ? snippet.tags : [];
+
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleFavorite(snippet);
+  };
 
   return (
     <div className="relative group">
       {/* Action buttons */}
       <div className="absolute top-0 right-0 flex justify-end pr-4 z-10">
         <div className="mt-[-0.6rem] flex gap-1 rounded-full bg-black/80 px-1.5 py-1 shadow-sm opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            onClick={handleFavoriteClick}
+            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs hover:bg-black"
+            title={snippet.is_favorite ? "Remove from favorites" : "Add to favorites"}
+          >
+            <FiStar
+              className={`h-3.5 w-3.5 ${
+                snippet.is_favorite
+                  ? "fill-yellow-400 text-yellow-400"
+                  : "text-slate-100"
+              }`}
+            />
+          </button>
           <button
             onClick={() => onRestore(snippet)}
             className="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs text-emerald-400 hover:bg-emerald-500/20"
@@ -364,9 +418,14 @@ function ArchiveSnippetCard({
             {snippet.description}
           </p>
         )}
-        <pre className="mb-3 overflow-hidden rounded bg-black/50 p-2 text-xs text-slate-300">
-          <code className="line-clamp-3">{snippet.code}</code>
-        </pre>
+        <div className="mb-3">
+          <CodeBlock
+            code={snippet.code}
+            language={snippet.language}
+            showLineNumbers={false}
+            maxHeight="100px"
+          />
+        </div>
         <div className="text-xs text-slate-500">
           Archived {new Date(snippet.deleted_at).toLocaleDateString()}
         </div>
