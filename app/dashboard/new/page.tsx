@@ -4,6 +4,8 @@ import { useState, FormEvent, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 import Toast from "@/components/Toast";
+import MonacoEditor from "@/components/MonacoEditor";
+import TagInput from "@/components/TagInput";
 import { FiArrowLeft } from "react-icons/fi";
 
 const LANGUAGES = [
@@ -39,7 +41,8 @@ export default function NewSnippetPage() {
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("JavaScript");
   const [folderId, setFolderId] = useState<string>("");
-  const [tagsInput, setTagsInput] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [toast, setToast] = useState<{
@@ -48,11 +51,9 @@ export default function NewSnippetPage() {
     type: "success" | "error" | "info";
   }>({ show: false, message: "", type: "info" });
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lineNumbersRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     fetchFolders();
+    fetchTagSuggestions();
   }, []);
 
   const fetchFolders = async () => {
@@ -70,6 +71,26 @@ export default function NewSnippetPage() {
 
     if (data) {
       setFolders(data);
+    }
+  };
+
+  const fetchTagSuggestions = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("snippets")
+      .select("tags")
+      .eq("user_id", user.id)
+      .not("tags", "is", null);
+
+    if (data) {
+      const allTags = data.flatMap((snippet) => snippet.tags || []);
+      const uniqueTags = Array.from(new Set(allTags));
+      setTagSuggestions(uniqueTags);
     }
   };
 
@@ -95,11 +116,6 @@ export default function NewSnippetPage() {
       setLoading(false);
       return;
     }
-
-    const tags = tagsInput
-      .split(",")
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0);
 
     const { error } = await supabase.from("snippets").insert({
       user_id: user.id,
@@ -131,15 +147,6 @@ export default function NewSnippetPage() {
     setTimeout(() => {
       router.push("/dashboard");
     }, 1000);
-  };
-
-  const lines = code.split("\n").length;
-
-  // Sync scroll between textarea and line numbers
-  const handleScroll = () => {
-    if (textareaRef.current && lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
-    }
   };
 
   return (
@@ -175,22 +182,25 @@ export default function NewSnippetPage() {
               />
             </div>
 
-            {/* File Extension */}
+            {/* Language */}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-300">
-                File Extension
+                Language
               </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={language.toLowerCase()}
-                  readOnly
-                  className="flex-1 rounded-lg border border-white/10 bg-black px-3 py-2.5 text-sm text-slate-400 outline-none"
-                />
+              <div className="flex items-center gap-3">
+                {/* Language Badge */}
+                <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 px-4 py-2.5">
+                  <div className="h-2 w-2 rounded-full bg-emerald-400"></div>
+                  <span className="text-sm font-medium text-emerald-400">
+                    {language}
+                  </span>
+                </div>
+                
+                {/* Language Selector */}
                 <select
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="rounded-lg border border-white/10 bg-black px-3 py-2.5 text-sm text-slate-100 outline-none ring-emerald-500/60 focus:border-emerald-500 focus:ring-2"
+                  className="flex-1 rounded-lg border border-white/10 bg-black px-3 py-2.5 text-sm text-slate-100 outline-none ring-emerald-500/60 focus:border-emerald-500 focus:ring-2"
                 >
                   {LANGUAGES.map((lang) => (
                     <option key={lang} value={lang}>
@@ -235,34 +245,17 @@ export default function NewSnippetPage() {
             />
           </div>
 
-          {/* Code with line numbers */}
+          {/* Code Editor */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-300">
               Code
             </label>
-
-            <div className="flex rounded-lg border border-white/10 bg-[#020617] text-slate-100">
-              {/* Line numbers */}
-              <div
-                ref={lineNumbersRef}
-                className="max-h-[360px] select-none overflow-hidden border-r border-white/10 bg-black/60 px-3 py-3 text-right text-xs leading-6 text-slate-500"
-              >
-                {Array.from({ length: lines }).map((_, i) => (
-                  <div key={i}>{i + 1}</div>
-                ))}
-              </div>
-
-              {/* Textarea */}
-              <textarea
-                ref={textareaRef}
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                onScroll={handleScroll}
-                placeholder="// Paste your code here..."
-                className="custom-scrollbar font-mono max-h-[360px] w-full resize-none bg-transparent px-3 py-3 text-xs leading-6 text-slate-100 outline-none placeholder:text-slate-600"
-                spellCheck={false}
-              />
-            </div>
+            <MonacoEditor
+              value={code}
+              onChange={setCode}
+              language={language}
+              height="400px"
+            />
           </div>
 
           {/* Tags */}
@@ -270,12 +263,11 @@ export default function NewSnippetPage() {
             <label className="mb-1.5 block text-sm font-medium text-slate-300">
               Tags
             </label>
-            <input
-              type="text"
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
-              placeholder="Add tags (comma-separated)"
-              className="w-full rounded-lg border border-white/10 bg-black px-3 py-2.5 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
+            <TagInput
+              tags={tags}
+              onChange={setTags}
+              suggestions={tagSuggestions}
+              placeholder="Add tags..."
             />
           </div>
 
