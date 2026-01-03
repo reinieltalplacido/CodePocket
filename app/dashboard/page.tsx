@@ -400,10 +400,10 @@ function SnippetCard({
 
       <div
         onClick={handleOpen}
-        className="cursor-pointer rounded-lg border border-white/10 bg-white/5 p-4 pt-5 transition-all hover:border-emerald-500/30 hover:bg-white/10"
+        className="cursor-pointer rounded-lg border border-white/10 bg-white/5 p-4 pt-5 transition-all hover:border-emerald-500/30 hover:bg-white/10 h-[380px] flex flex-col"
       >
         <div className="mb-2 flex items-start justify-between gap-2">
-          <div className="space-y-1">
+          <div className="space-y-1 flex-1 min-w-0">
             <h3 className="font-medium text-slate-100 line-clamp-1">
               {snippet.title}
             </h3>
@@ -429,7 +429,7 @@ function SnippetCard({
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
             <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
               {prettyLanguage(snippet.language)}
             </span>
@@ -442,21 +442,23 @@ function SnippetCard({
           </div>
         </div>
 
-        {snippet.description && (
-          <p className="mb-3 line-clamp-2 text-xs text-slate-400">
-            {snippet.description}
-          </p>
-        )}
-        <div className="mb-3">
+        <div className="mb-3 h-[40px]">
+          {snippet.description && (
+            <p className="line-clamp-2 text-xs text-slate-400">
+              {snippet.description}
+            </p>
+          )}
+        </div>
+        <div className="mb-3 flex-1 min-h-0">
           <CodeBlock
             code={snippet.code}
             language={snippet.language}
             showLineNumbers={false}
-            maxHeight="120px"
+            maxHeight="180px"
             className="text-xs"
           />
         </div>
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-slate-500 mt-auto">
           {new Date(snippet.created_at).toLocaleDateString()}
         </div>
       </div>
