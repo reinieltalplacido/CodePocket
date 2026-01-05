@@ -20,23 +20,33 @@ export default function LoginPage() {
     setErrorMsg(null);
     setLoading(true);
 
-    // Create a Supabase client with the appropriate storage based on keepSignedIn
-    // localStorage = persistent (survives browser close)
-    // sessionStorage = temporary (cleared when browser closes)
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    // Set storage preference BEFORE login
+    if (keepSignedIn) {
+      localStorage.setItem("auth-storage-preference", "local");
+      sessionStorage.removeItem("auth-storage-preference");
+    } else {
+      sessionStorage.setItem("auth-storage-preference", "session");
+      localStorage.removeItem("auth-storage-preference");
+    }
 
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        storage: keepSignedIn
-          ? (typeof window !== "undefined" ? window.localStorage : undefined)
-          : (typeof window !== "undefined" ? window.sessionStorage : undefined),
-        storageKey: keepSignedIn ? "sb-auth-token" : "sb-session-token",
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    });
+    // Use appropriate storage based on preference
+    const storage = keepSignedIn ? localStorage : sessionStorage;
+    const storageKey = keepSignedIn ? "sb-auth-token" : "sb-session-token";
+
+    // Create client with correct storage
+    const { createClient } = await import("@supabase/supabase-js");
+    const authClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          storage,
+          storageKey,
+          persistSession: true,
+          autoRefreshToken: true,
+        },
+      }
+    );
 
     const { error } = await authClient.auth.signInWithPassword({
       email,
