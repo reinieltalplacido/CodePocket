@@ -1,0 +1,7 @@
+# CodePocket - Robots Configuration
+User-agent: *
+Allow: /
+
+# Sitemap will be auto-generated at /sitemap.xml
+# Vercel will automatically use your deployment URL
+Sitemap: https://reiniel.vercel.app/sitemap.xml

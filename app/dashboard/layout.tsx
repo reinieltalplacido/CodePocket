@@ -19,6 +19,7 @@ import {
   FiFolder,
   FiPlus,
   FiTrash2,
+  FiHelpCircle,
 } from "react-icons/fi";
 
 type Folder = {
@@ -137,6 +138,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             collapsed={collapsed}
             active={pathname === "/dashboard/archive"}
             onClick={() => router.push("/dashboard/archive")}
+          />
+          <SidebarItem
+            icon={<FiHelpCircle className="h-5 w-5" />}
+            label="Help"
+            collapsed={collapsed}
+            active={pathname === "/dashboard/help"}
+            onClick={() => router.push("/dashboard/help")}
           />
 
           {/* Folders Section */}
