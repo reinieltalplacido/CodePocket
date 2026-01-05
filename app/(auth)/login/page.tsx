@@ -20,9 +20,25 @@ export default function LoginPage() {
     setErrorMsg(null);
     setLoading(true);
 
-    // Use the default supabase client (which uses localStorage for persistence)
-    // If keepSignedIn is false, we'll sign out on window close by using sessionStorage
-    const { error } = await supabase.auth.signInWithPassword({
+    // Create a Supabase client with the appropriate storage based on keepSignedIn
+    // localStorage = persistent (survives browser close)
+    // sessionStorage = temporary (cleared when browser closes)
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        storage: keepSignedIn
+          ? (typeof window !== "undefined" ? window.localStorage : undefined)
+          : (typeof window !== "undefined" ? window.sessionStorage : undefined),
+        storageKey: keepSignedIn ? "sb-auth-token" : "sb-session-token",
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+
+    const { error } = await authClient.auth.signInWithPassword({
       email,
       password,
     });
@@ -32,18 +48,6 @@ export default function LoginPage() {
     if (error) {
       setErrorMsg(error.message);
       return;
-    }
-
-    // If user doesn't want to stay signed in, we need to move the session to sessionStorage
-    // This will make the session temporary (cleared when browser closes)
-    if (!keepSignedIn) {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        // Store in sessionStorage instead of localStorage
-        sessionStorage.setItem('supabase.auth.token', JSON.stringify(data.session));
-        // Clear from localStorage
-        localStorage.removeItem('sb-' + process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0] + '-auth-token');
-      }
     }
 
     router.push("/dashboard");
