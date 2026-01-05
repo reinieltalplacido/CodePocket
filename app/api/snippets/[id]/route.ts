@@ -19,7 +19,7 @@ async function validateApiKey(apiKey: string) {
 // GET /api/snippets/[id] - Get single snippet
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const apiKey = request.headers.get("x-api-key");
 
@@ -33,10 +33,12 @@ export async function GET(
     return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
   }
 
+  const { id } = await params;
+
   const { data, error } = await supabase
     .from("snippets")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .eq("user_id", userId)
     .single();
 
@@ -50,7 +52,7 @@ export async function GET(
 // PUT /api/snippets/[id] - Update snippet
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const apiKey = request.headers.get("x-api-key");
 
@@ -64,6 +66,7 @@ export async function PUT(
     return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
   }
 
+  const { id } = await params;
   const body = await request.json();
   const { title, code, language, description, tags, folder_id } = body;
 
@@ -77,7 +80,7 @@ export async function PUT(
       tags,
       folder_id,
     })
-    .eq("id", params.id)
+    .eq("id", id)
     .eq("user_id", userId)
     .select()
     .single();
@@ -92,7 +95,7 @@ export async function PUT(
 // DELETE /api/snippets/[id] - Delete snippet
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const apiKey = request.headers.get("x-api-key");
 
@@ -106,10 +109,12 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
   }
 
+  const { id } = await params;
+
   const { error } = await supabase
     .from("snippets")
     .delete()
-    .eq("id", params.id)
+    .eq("id", id)
     .eq("user_id", userId);
 
   if (error) {
