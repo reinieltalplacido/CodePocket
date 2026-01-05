@@ -20,25 +20,8 @@ export default function LoginPage() {
     setErrorMsg(null);
     setLoading(true);
 
-    // Create a temporary client with the correct storage for this login
-    const { createClient } = await import("@supabase/supabase-js");
-    const storage = keepSignedIn ? localStorage : sessionStorage;
-    const storageKey = keepSignedIn ? "sb-auth-token" : "sb-session-token";
-
-    const authClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          storage,
-          storageKey,
-          persistSession: true,
-          autoRefreshToken: true,
-        },
-      }
-    );
-
-    const { error } = await authClient.auth.signInWithPassword({
+    // Use the standard supabase client
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
