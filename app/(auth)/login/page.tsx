@@ -20,21 +20,11 @@ export default function LoginPage() {
     setErrorMsg(null);
     setLoading(true);
 
-    // Set storage preference BEFORE login
-    if (keepSignedIn) {
-      localStorage.setItem("auth-storage-preference", "local");
-      sessionStorage.removeItem("auth-storage-preference");
-    } else {
-      sessionStorage.setItem("auth-storage-preference", "session");
-      localStorage.removeItem("auth-storage-preference");
-    }
-
-    // Use appropriate storage based on preference
+    // Create a temporary client with the correct storage for this login
+    const { createClient } = await import("@supabase/supabase-js");
     const storage = keepSignedIn ? localStorage : sessionStorage;
     const storageKey = keepSignedIn ? "sb-auth-token" : "sb-session-token";
 
-    // Create client with correct storage
-    const { createClient } = await import("@supabase/supabase-js");
     const authClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
