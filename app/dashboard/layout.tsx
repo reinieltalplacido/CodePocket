@@ -20,6 +20,8 @@ import {
   FiPlus,
   FiTrash2,
   FiHelpCircle,
+  FiMenu,
+  FiX,
 } from "react-icons/fi";
 
 type Folder = {
@@ -36,6 +38,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -129,16 +132,34 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
       <div className="flex min-h-screen bg-black text-slate-50">
+      {/* Mobile backdrop overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
-        className={`group relative flex flex-col border-r border-white/10 bg-black transition-all duration-300 ease-in-out ${
-          collapsed ? "w-16" : "w-64"
-        }`}
+        className={`group fixed md:relative inset-y-0 left-0 z-50 flex flex-col border-r border-white/10 bg-black transition-all duration-300 ease-in-out ${
+          collapsed ? "md:w-16" : "md:w-64"
+        } ${
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        } w-64`}
       >
-        {/* Collapse toggle button */}
+        {/* Mobile close button */}
+        <button
+          onClick={() => setIsMobileMenuOpen(false)}
+          className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/10 hover:text-white md:hidden"
+        >
+          <FiX className="h-5 w-5" />
+        </button>
+
+        {/* Collapse toggle button (desktop only) */}
         <button
           onClick={() => setCollapsed((v) => !v)}
-          className="absolute -right-3 top-6 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black text-slate-400 opacity-0 shadow-lg transition-all hover:bg-slate-900 hover:text-slate-100 group-hover:opacity-100"
+          className="absolute -right-3 top-6 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black text-slate-400 opacity-0 shadow-lg transition-all hover:bg-slate-900 hover:text-slate-100 group-hover:opacity-100 md:flex"
         >
           {collapsed ? (
             <FiChevronRight className="h-3 w-3" />
@@ -166,28 +187,40 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             label="All Snippets"
             collapsed={collapsed}
             active={pathname === "/dashboard"}
-            onClick={() => router.push("/dashboard")}
+            onClick={() => {
+              router.push("/dashboard");
+              setIsMobileMenuOpen(false);
+            }}
           />
           <SidebarItem
             icon={<FiStar className="h-5 w-5" />}
             label="Favorites"
             collapsed={collapsed}
             active={pathname === "/dashboard/favorites"}
-            onClick={() => router.push("/dashboard/favorites")}
+            onClick={() => {
+              router.push("/dashboard/favorites");
+              setIsMobileMenuOpen(false);
+            }}
           />
           <SidebarItem
             icon={<FiTrash2 className="h-5 w-5" />}
             label="Archive"
             collapsed={collapsed}
             active={pathname === "/dashboard/archive"}
-            onClick={() => router.push("/dashboard/archive")}
+            onClick={() => {
+              router.push("/dashboard/archive");
+              setIsMobileMenuOpen(false);
+            }}
           />
           <SidebarItem
             icon={<FiHelpCircle className="h-5 w-5" />}
             label="Help"
             collapsed={collapsed}
             active={pathname === "/dashboard/help"}
-            onClick={() => router.push("/dashboard/help")}
+            onClick={() => {
+              router.push("/dashboard/help");
+              setIsMobileMenuOpen(false);
+            }}
           />
 
           {/* Folders Section */}
@@ -214,7 +247,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 folders.map((folder) => (
                   <button
                     key={folder.id}
-                    onClick={() => router.push(`/dashboard/folder/${folder.id}`)}
+                    onClick={() => {
+                      router.push(`/dashboard/folder/${folder.id}`);
+                      setIsMobileMenuOpen(false);
+                    }}
                     className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                       pathname === `/dashboard/folder/${folder.id}`
                         ? "bg-white/5 text-emerald-400"
@@ -253,9 +289,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <main className="flex flex-1 flex-col overflow-hidden bg-black">
         {/* Top navbar */}
         <header className="border-b border-white/10 bg-black">
-          <div className="flex items-center justify-between px-6 py-3">
-            <h1 className="text-lg font-semibold text-slate-100">Dashboard</h1>
+          <div className="flex items-center justify-between px-4 py-3 md:px-6">
             <div className="flex items-center gap-3">
+              {/* Mobile hamburger menu button */}
+              <button
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/10 hover:text-white md:hidden"
+              >
+                <FiMenu className="h-5 w-5" />
+              </button>
+              <h1 className="text-base font-semibold text-slate-100 md:text-lg">Dashboard</h1>
+            </div>
+            <div className="flex items-center gap-2 md:gap-3">
               <ThemeSelector />
               <UserMenu onOpenProfile={() => setShowProfileModal(true)} />
             </div>
@@ -264,7 +309,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         {/* Page content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>
+          <div className="mx-auto max-w-6xl px-4 py-6 md:px-6 md:py-8">{children}</div>
         </div>
       </main>
 

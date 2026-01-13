@@ -222,9 +222,9 @@ const toggleFavorite = async (snippet: Snippet) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">
+          <h1 className="text-xl font-semibold text-slate-100 md:text-2xl">
             Your snippets
           </h1>
           <p className="mt-1 text-sm text-slate-400">
@@ -233,7 +233,7 @@ const toggleFavorite = async (snippet: Snippet) => {
         </div>
         <button
           onClick={() => router.push("/dashboard/new")}
-          className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-emerald-400"
+          className="flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 sm:w-auto"
         >
           <FiPlus className="h-4 w-4" />
           New Snippet
@@ -293,7 +293,7 @@ const toggleFavorite = async (snippet: Snippet) => {
 
       {/* Confirm delete modal */}
       {confirmOpen && snippetToDelete && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-lg border border-white/10 bg-zinc-950 p-5 shadow-xl">
             <h2 className="text-sm font-semibold text-slate-100">
               Archive snippet

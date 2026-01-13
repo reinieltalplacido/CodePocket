@@ -85,7 +85,7 @@ export default function SignupPage() {
 
       {/* Auth card */}
       <div className="relative w-full max-w-md animate-fade-in">
-        <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900/90 to-slate-950/90 p-8 shadow-2xl backdrop-blur-xl">
+        <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900/90 to-slate-950/90 p-6 shadow-2xl backdrop-blur-xl md:p-8">
           {/* Header */}
           <div className="mb-8 text-center">
             <div className="mb-3 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30">
