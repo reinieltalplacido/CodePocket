@@ -34,12 +34,34 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
+  // Check authentication on mount
   useEffect(() => {
-    fetchFolders();
-  }, []);
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        // No user found, redirect to login
+        router.replace('/login');
+        return;
+      }
+      
+      setIsAuthenticated(true);
+      setIsLoading(false);
+    };
+
+    checkAuth();
+  }, [router]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchFolders();
+    }
+  }, [isAuthenticated]);
 
   const fetchFolders = async () => {
     const {
@@ -82,6 +104,27 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     };
     return colors[color] || colors.emerald;
   };
+
+  // Show loading screen while checking authentication
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black">
+        <div className="text-center">
+          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30">
+            <span className="text-2xl font-bold text-white">CP</span>
+          </div>
+          <div className="mt-4 h-1 w-48 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full w-1/2 animate-pulse bg-emerald-500"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render dashboard if not authenticated (will redirect)
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <ThemeProvider>

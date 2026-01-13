@@ -1,33 +1,20 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import Link from "next/link";
+import { FormEvent, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import { validateEmail, validatePassword } from "@/lib/validation";
-import { FiEye, FiEyeOff, FiAlertCircle, FiLoader, FiCheck, FiX } from "react-icons/fi";
+import { validatePassword } from "@/lib/validation";
+import { FiEye, FiEyeOff, FiAlertCircle, FiLoader, FiCheck, FiX, FiLock } from "react-icons/fi";
 
-export default function SignupPage() {
+export default function ResetPasswordPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [passwordStrength, setPasswordStrength] = useState<'weak' | 'medium' | 'strong' | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
-
-  const handleEmailChange = (value: string) => {
-    setEmail(value);
-    setEmailError(null);
-    
-    if (value.length > 0) {
-      const validation = validateEmail(value);
-      if (!validation.valid) {
-        setEmailError(validation.error || null);
-      }
-    }
-  };
 
   const handlePasswordChange = (value: string) => {
     setPassword(value);
@@ -44,13 +31,6 @@ export default function SignupPage() {
     e.preventDefault();
     setErrorMsg(null);
 
-    // Validate email
-    const emailValidation = validateEmail(email);
-    if (!emailValidation.valid) {
-      setErrorMsg(emailValidation.error || 'Invalid email');
-      return;
-    }
-
     // Validate password
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.valid) {
@@ -58,11 +38,16 @@ export default function SignupPage() {
       return;
     }
 
+    // Check if passwords match
+    if (password !== confirmPassword) {
+      setErrorMsg('Passwords do not match');
+      return;
+    }
+
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
+    const { error } = await supabase.auth.updateUser({
+      password: password,
     });
 
     setLoading(false);
@@ -72,6 +57,7 @@ export default function SignupPage() {
       return;
     }
 
+    // Success - redirect to dashboard
     router.push("/dashboard");
   };
 
@@ -89,42 +75,22 @@ export default function SignupPage() {
           {/* Header */}
           <div className="mb-8 text-center">
             <div className="mb-3 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30">
-              <span className="text-2xl font-bold text-white">CP</span>
+              <FiLock className="h-7 w-7 text-white" />
             </div>
             <h1 className="mb-2 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-3xl font-bold text-transparent">
-              Create your account
+              Reset Password
             </h1>
             <p className="text-sm text-slate-400">
-              Save and manage all your favorite snippets in one place
+              Choose a new strong password for your account
             </p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email field */}
+            {/* New Password field */}
             <div className="group">
               <label className="mb-2 block text-sm font-medium text-slate-300">
-                Email address
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => handleEmailChange(e.target.value)}
-                placeholder="you@example.com"
-                className={`w-full rounded-lg border ${
-                  emailError ? 'border-red-500/50' : 'border-white/10'
-                } bg-white/5 px-4 py-3 text-sm text-white outline-none ring-emerald-500/40 transition-all placeholder:text-slate-500 hover:border-white/20 focus:border-emerald-500/50 focus:bg-white/10 focus:ring-4`}
-              />
-              {emailError && (
-                <p className="mt-1 text-xs text-red-400">{emailError}</p>
-              )}
-            </div>
-
-            {/* Password field */}
-            <div className="group">
-              <label className="mb-2 block text-sm font-medium text-slate-300">
-                Password
+                New Password
               </label>
               <div className="relative">
                 <input
@@ -199,6 +165,39 @@ export default function SignupPage() {
               </div>
             </div>
 
+            {/* Confirm Password field */}
+            <div className="group">
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className={`w-full rounded-lg border ${
+                    confirmPassword && password !== confirmPassword ? 'border-red-500/50' : 'border-white/10'
+                  } bg-white/5 px-4 py-3 pr-12 text-sm text-white outline-none ring-emerald-500/40 transition-all placeholder:text-slate-500 hover:border-white/20 focus:border-emerald-500/50 focus:bg-white/10 focus:ring-4`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-300"
+                >
+                  {showConfirmPassword ? (
+                    <FiEyeOff className="h-4 w-4" />
+                  ) : (
+                    <FiEye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              {confirmPassword && password !== confirmPassword && (
+                <p className="mt-1 text-xs text-red-400">Passwords do not match</p>
+              )}
+            </div>
+
             {/* Error message */}
             {errorMsg && (
               <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-3 animate-shake">
@@ -217,28 +216,15 @@ export default function SignupPage() {
                 {loading ? (
                   <>
                     <FiLoader className="h-4 w-4 animate-spin" />
-                    Creating account...
+                    Resetting...
                   </>
                 ) : (
-                  "Create account"
+                  "Reset Password"
                 )}
               </span>
               <div className="absolute inset-0 -z-0 bg-gradient-to-r from-emerald-400 to-emerald-500 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           </form>
-
-          {/* Footer */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-slate-400">
-              Already have an account?{" "}
-              <Link
-                href="/login"
-                className="font-medium text-emerald-400 transition-colors hover:text-emerald-300"
-              >
-                Log in
-              </Link>
-            </p>
-          </div>
         </div>
       </div>
 

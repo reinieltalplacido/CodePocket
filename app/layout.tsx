@@ -14,12 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CodePocket - Your Personal Code Snippet Manager",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://code-pocket.vercel.app"),
+  title: "CodePocket",
   description: "Save, organize, and access your favorite code snippets from anywhere. Built with Next.js, TypeScript, and Supabase.",
   keywords: ["code snippets", "snippet manager", "developer tools", "code organization", "vscode extension"],
   authors: [{ name: "Reiniel" }],
   openGraph: {
-    title: "CodePocket - Your Personal Code Snippet Manager",
+    title: "CodePocket",
     description: "Save, organize, and access your favorite code snippets from anywhere.",
     url: process.env.NEXT_PUBLIC_SITE_URL || "https://reiniel.vercel.app",
     siteName: "CodePocket",
@@ -29,13 +30,13 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "CodePocket - Code Snippet Manager",
+        alt: "CodePocket",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "CodePocket - Your Personal Code Snippet Manager",
+    title: "CodePocket",
     description: "Save, organize, and access your favorite code snippets from anywhere.",
     images: ["/og-image.png"],
   },

@@ -2,53 +2,45 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import { FiEye, FiEyeOff, FiAlertCircle, FiLoader, FiCheck } from "react-icons/fi";
+import { validateEmail } from "@/lib/validation";
+import { FiAlertCircle, FiLoader, FiMail, FiCheckCircle } from "react-icons/fi";
 
-export default function LoginPage() {
-  const router = useRouter();
+export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [keepSignedIn, setKeepSignedIn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
 
   const handleEmailChange = (value: string) => {
     setEmail(value);
     setEmailError(null);
+    
+    if (value.length > 0) {
+      const validation = validateEmail(value);
+      if (!validation.valid) {
+        setEmailError(validation.error || null);
+      }
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setSuccessMsg(null);
 
-    // Basic validation
-    if (!email || !password) {
-      setErrorMsg('Please enter both email and password');
+    // Validate email
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      setErrorMsg(emailValidation.error || 'Invalid email');
       return;
     }
 
     setLoading(true);
 
-    // Create a custom Supabase client with the appropriate storage option
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    
-    const customSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        storage: keepSignedIn ? window.localStorage : window.sessionStorage,
-      },
-    });
-
-    const { error } = await customSupabase.auth.signInWithPassword({
-      email,
-      password,
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
     });
 
     setLoading(false);
@@ -58,7 +50,8 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    setSuccessMsg("Password reset link sent! Check your email.");
+    setEmail("");
   };
 
   return (
@@ -75,13 +68,13 @@ export default function LoginPage() {
           {/* Header */}
           <div className="mb-8 text-center">
             <div className="mb-3 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30">
-              <span className="text-2xl font-bold text-white">CP</span>
+              <FiMail className="h-7 w-7 text-white" />
             </div>
             <h1 className="mb-2 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-3xl font-bold text-transparent">
-              Welcome back
+              Forgot Password?
             </h1>
             <p className="text-sm text-slate-400">
-              Log in to access your saved snippets
+              Enter your email and we'll send you a reset link
             </p>
           </div>
 
@@ -107,61 +100,13 @@ export default function LoginPage() {
               )}
             </div>
 
-            {/* Password field */}
-            <div className="group">
-              <div className="mb-2 flex items-center justify-between">
-                <label className="block text-sm font-medium text-slate-300">
-                  Password
-                </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs text-emerald-400 transition-colors hover:text-emerald-300"
-                >
-                  Forgot password?
-                </Link>
+            {/* Success message */}
+            {successMsg && (
+              <div className="flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
+                <FiCheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-400" />
+                <p className="text-sm text-emerald-400">{successMsg}</p>
               </div>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 pr-12 text-sm text-white outline-none ring-emerald-500/40 transition-all placeholder:text-slate-500 hover:border-white/20 focus:border-emerald-500/50 focus:bg-white/10 focus:ring-4"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-300"
-                >
-                  {showPassword ? (
-                    <FiEyeOff className="h-4 w-4" />
-                  ) : (
-                    <FiEye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Keep me signed in checkbox */}
-            <div className="flex items-center gap-3">
-              <div className="relative flex items-center">
-                <input
-                  type="checkbox"
-                  id="keepSignedIn"
-                  checked={keepSignedIn}
-                  onChange={(e) => setKeepSignedIn(e.target.checked)}
-                  className="peer h-5 w-5 cursor-pointer appearance-none rounded border-2 border-white/20 bg-white/5 transition-all checked:border-emerald-500 checked:bg-emerald-500 hover:border-white/30 focus:ring-2 focus:ring-emerald-500/40 focus:ring-offset-0"
-                />
-                <FiCheck className="pointer-events-none absolute left-0.5 top-0.5 h-4 w-4 text-white opacity-0 transition-opacity peer-checked:opacity-100" />
-              </div>
-              <label
-                htmlFor="keepSignedIn"
-                className="cursor-pointer select-none text-sm text-slate-300 transition-colors hover:text-slate-200"
-              >
-                Keep me signed in
-              </label>
-            </div>
+            )}
 
             {/* Error message */}
             {errorMsg && (
@@ -181,10 +126,10 @@ export default function LoginPage() {
                 {loading ? (
                   <>
                     <FiLoader className="h-4 w-4 animate-spin" />
-                    Signing in...
+                    Sending...
                   </>
                 ) : (
-                  "Sign in"
+                  "Send Reset Link"
                 )}
               </span>
               <div className="absolute inset-0 -z-0 bg-gradient-to-r from-emerald-400 to-emerald-500 opacity-0 transition-opacity group-hover:opacity-100" />
@@ -194,12 +139,12 @@ export default function LoginPage() {
           {/* Footer */}
           <div className="mt-6 text-center">
             <p className="text-sm text-slate-400">
-              New here?{" "}
+              Remember your password?{" "}
               <Link
-                href="/signup"
+                href="/login"
                 className="font-medium text-emerald-400 transition-colors hover:text-emerald-300"
               >
-                Create an account
+                Back to login
               </Link>
             </p>
           </div>
