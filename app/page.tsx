@@ -234,10 +234,10 @@ export default function Home() {
       {/* Features Grid */}
       <section ref={featuresAnimation.ref} className="relative px-4 py-20 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
-          {/* Bento Box Grid Layout */}
-          <div className="grid gap-6 md:grid-cols-6 lg:grid-cols-6 auto-rows-fr">
-            {/* Feature 1 - Syntax Highlighting - LARGE FEATURED BOX (spans 2 columns) */}
-            <div className={`group md:col-span-6 lg:col-span-4 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
+          {/* Bento Box Grid Layout - Responsive: 1 col mobile, 6 cols desktop */}
+          <div className="grid gap-6 grid-cols-1 md:grid-cols-6 lg:grid-cols-6 auto-rows-fr">
+            {/* Feature 1 - Syntax Highlighting - LARGE FEATURED BOX */}
+            <div className={`group col-span-1 md:col-span-6 lg:col-span-4 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-slate-100">Syntax Highlighting</h3>
                 <p className="mt-2 text-sm text-slate-400">
@@ -333,8 +333,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Feature 2 - Smart Organization - MEDIUM BOX (right side of row 1) */}
-            <div className={`group md:col-span-6 lg:col-span-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-100 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
+            {/* Feature 2 - Smart Organization */}
+            <div className={`group col-span-1 md:col-span-6 lg:col-span-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-100 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-slate-100">Smart Organization</h3>
                 <p className="mt-2 text-sm text-slate-400">
@@ -374,8 +374,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Feature 3 - Powerful Search - SMALL BOX (row 2, left) */}
-            <div className={`group md:col-span-3 lg:col-span-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-200 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
+            {/* Feature 3 - Powerful Search */}
+            <div className={`group col-span-1 md:col-span-3 lg:col-span-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-200 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-slate-100">Powerful Search</h3>
                 <p className="mt-2 text-sm text-slate-400">
@@ -407,8 +407,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Feature 4 - Team Collaboration - SMALL BOX (row 2, middle) */}
-            <div className={`group md:col-span-3 lg:col-span-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-300 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
+            {/* Feature 4 - Team Collaboration */}
+            <div className={`group col-span-1 md:col-span-3 lg:col-span-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-300 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-slate-100">Team Collaboration</h3>
                 <p className="mt-2 text-sm text-slate-400">
@@ -442,8 +442,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Feature 5 - Lightning Fast - SMALL BOX (row 2, right) */}
-            <div className={`group md:col-span-6 lg:col-span-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-[400ms] hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
+            {/* Feature 5 - Lightning Fast */}
+            <div className={`group col-span-1 md:col-span-6 lg:col-span-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-[400ms] hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-slate-100">Lightning Fast</h3>
                 <p className="mt-2 text-sm text-slate-400">
@@ -482,8 +482,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Feature 6 - VSCode Extension - MEDIUM CENTERED BOX (row 3, centered) */}
-            <div className={`group md:col-span-6 lg:col-span-4 lg:col-start-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-500 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
+            {/* Feature 6 - VSCode Extension */}
+            <div className={`group col-span-1 md:col-span-6 lg:col-span-4 lg:col-start-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-500 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-slate-100">VSCode Extension</h3>
                 <p className="mt-2 text-sm text-slate-400">
