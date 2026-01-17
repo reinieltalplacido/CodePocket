@@ -4,9 +4,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import { FiPlus, FiSearch, FiCode, FiCopy, FiTrash2, FiStar } from "react-icons/fi";
+import { FiPlus, FiSearch, FiCode, FiCopy, FiTrash2, FiStar, FiUsers } from "react-icons/fi";
 import Toast from "@/components/Toast";
 import CodeBlock from "@/components/CodeBlock";
+import LoadingState from "@/components/LoadingState";
+import ErrorState from "@/components/ErrorState";
+import { getErrorMessage } from "@/lib/errors";
 
 type Snippet = {
   id: string;
@@ -24,6 +27,13 @@ type Snippet = {
     name: string;
     color: string;
   } | null;
+  group_snippets?: Array<{
+    group_id: string;
+    groups: {
+      id: string;
+      name: string;
+    };
+  }>;
 };
 
 function prettyLanguage(id: string | undefined): string {
@@ -51,6 +61,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [snippetToDelete, setSnippetToDelete] = useState<Snippet | null>(null);
@@ -107,34 +118,49 @@ export default function DashboardPage() {
   }, []);
 
   const fetchSnippets = async () => {
-    setLoading(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data, error: fetchError } = await supabase
+        .from("snippets")
+        .select(`
+          *,
+          folders (
+            id,
+            name,
+            color
+          ),
+          group_snippets (
+            group_id,
+            groups (
+              id,
+              name
+            )
+          )
+        `)
+        .eq("user_id", user.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+
+      if (fetchError) throw fetchError;
+
+      setSnippets(data || []);
+    } catch (err) {
+      console.error("Error fetching snippets:", err);
+      setError(getErrorMessage(err));
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const { data, error } = await supabase
-      .from("snippets")
-      .select(`
-        *,
-        folders (
-          id,
-          name,
-          color
-        )
-      `)
-      .eq("user_id", user.id)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
-
-    if (!error && data) {
-      setSnippets(data as Snippet[]);
-    }
-    setLoading(false);
   };
 
   const filteredSnippets = snippets.filter(
@@ -227,7 +253,7 @@ const toggleFavorite = async (snippet: Snippet) => {
           <h1 className="text-xl font-semibold text-slate-100 md:text-2xl">
             Your snippets
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-slate-400 whitespace-nowrap">
             {snippets.length} snippet{snippets.length !== 1 ? "s" : ""} saved
           </p>
         </div>
@@ -254,9 +280,9 @@ const toggleFavorite = async (snippet: Snippet) => {
 
       {/* Snippets Grid */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <p className="text-sm text-slate-400">Loading snippets...</p>
-        </div>
+        <LoadingState message="Loading your snippets..." />
+      ) : error ? (
+        <ErrorState message={error} onRetry={fetchSnippets} />
       ) : filteredSnippets.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 py-16">
           <FiCode className="mb-3 h-12 w-12 text-slate-600" />
@@ -279,7 +305,7 @@ const toggleFavorite = async (snippet: Snippet) => {
           )}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredSnippets.map((snippet) => (
             <SnippetCard
               key={snippet.id}
@@ -400,7 +426,7 @@ function SnippetCard({
 
       <div
         onClick={handleOpen}
-        className="cursor-pointer rounded-lg border border-white/10 bg-white/5 p-4 pt-5 transition-all hover:border-emerald-500/30 hover:bg-white/10 h-[380px] flex flex-col"
+        className="cursor-pointer rounded-lg border border-white/10 bg-white/5 p-3 pt-4 sm:p-4 sm:pt-5 transition-all hover:border-emerald-500/30 hover:bg-white/10 h-[380px] flex flex-col"
       >
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="space-y-1 flex-1 min-w-0">
@@ -439,23 +465,33 @@ function SnippetCard({
                 {snippet.source === "vscode" ? "VS Code" : "Web"}
               </span>
             )}
+
+            {snippet.group_snippets && snippet.group_snippets.length > 0 && (
+              <span 
+                className="flex items-center gap-1 rounded bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-300"
+                title={`Shared to ${snippet.group_snippets.length} group${snippet.group_snippets.length > 1 ? 's' : ''}`}
+              >
+                <FiUsers className="h-2.5 w-2.5" />
+                {snippet.group_snippets.length}
+              </span>
+            )}
           </div>
         </div>
 
-        <div className="mb-3 h-[40px]">
-          {snippet.description && (
+        {snippet.description && (
+          <div className="mb-3">
             <p className="line-clamp-2 text-xs text-slate-400">
               {snippet.description}
             </p>
-          )}
-        </div>
-        <div className="mb-3 flex-1 min-h-0">
+          </div>
+        )}
+        <div className="mb-3 h-[180px] sm:h-[240px]">
           <CodeBlock
             code={snippet.code}
             language={snippet.language}
             showLineNumbers={false}
-            maxHeight="180px"
-            className="text-xs"
+            maxHeight="240px"
+            className="text-xs sm:text-sm h-full"
           />
         </div>
         <div className="text-xs text-slate-500 mt-auto">

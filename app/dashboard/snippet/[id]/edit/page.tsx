@@ -7,6 +7,7 @@ import Toast from "@/components/Toast";
 import ConfirmModal from "@/components/ConfirmModal";
 import MonacoEditor from "@/components/MonacoEditor";
 import TagInput from "@/components/TagInput";
+import LoadingState from "@/components/LoadingState";
 import { FiArrowLeft } from "react-icons/fi";
 
 const LANGUAGES = [
@@ -223,11 +224,7 @@ export default function EditSnippetPage() {
   };
 
   if (fetchingLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-sm text-slate-400">Loading snippet...</p>
-      </div>
-    );
+    return <LoadingState message="Loading snippet..." />;
   }
 
   return (

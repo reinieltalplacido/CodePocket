@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase-client";
 import { FiTrash2, FiRotateCcw, FiAlertCircle, FiStar } from "react-icons/fi";
 import Toast from "@/components/Toast";
 import CodeBlock from "@/components/CodeBlock";
+import LoadingState from "@/components/LoadingState";
 
 type Snippet = {
   id: string;
@@ -217,9 +218,7 @@ export default function ArchivePage() {
 
       {/* Snippets Grid */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <p className="text-sm text-slate-400">Loading archived snippets...</p>
-        </div>
+        <LoadingState message="Loading archived snippets..." />
       ) : snippets.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 py-16">
           <FiTrash2 className="mb-3 h-12 w-12 text-slate-600" />

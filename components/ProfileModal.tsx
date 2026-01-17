@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase-client";
 import Modal from "@/components/Modal";
 import Toast from "@/components/Toast";
-import { FiCopy, FiTrash2, FiPlus, FiEye, FiEyeOff, FiCheck } from "react-icons/fi";
+import AvatarUpload from "@/components/AvatarUpload";
+import { FiCopy, FiTrash2, FiPlus, FiEye, FiEyeOff, FiCheck, FiUser, FiCalendar } from "react-icons/fi";
+import type { Profile } from "@/lib/types/profile";
 
 type ProfileModalProps = {
   isOpen: boolean;
@@ -20,10 +22,16 @@ type ApiKey = {
 
 export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   const [email, setEmail] = useState("");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [bio, setBio] = useState("");
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [showNewKeyForm, setShowNewKeyForm] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [creatingKey, setCreatingKey] = useState(false);
+  const [updatingProfile, setUpdatingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [toast, setToast] = useState<{
@@ -35,6 +43,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
   useEffect(() => {
     if (isOpen) {
       fetchUserData();
+      fetchProfile();
       fetchApiKeys();
     }
   }, [isOpen]);
@@ -45,6 +54,29 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     } = await supabase.auth.getUser();
     if (user) {
       setEmail(user.email || "");
+    }
+  };
+
+  const fetchProfile = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) return;
+
+    const response = await fetch("/api/profile", {
+      credentials: "include",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      setProfile(data.profile);
+      setUsername(data.profile.username || "");
+      setDisplayName(data.profile.display_name || "");
+      setBio(data.profile.bio || "");
     }
   };
 
@@ -63,6 +95,148 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
 
     if (data) {
       setApiKeys(data);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    setUpdatingProfile(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      setUpdatingProfile(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          username: username.trim() || null,
+          display_name: displayName.trim() || null,
+          bio: bio.trim() || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update profile");
+      }
+
+      setProfile(data.profile);
+      setToast({
+        show: true,
+        message: "Profile updated successfully!",
+        type: "success",
+      });
+    } catch (error: any) {
+      setToast({
+        show: true,
+        message: error.message,
+        type: "error",
+      });
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
+
+  const handleAvatarUpload = async (file: File) => {
+    setUploadingAvatar(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      setUploadingAvatar(false);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("avatar", file);
+
+      const response = await fetch("/api/profile/avatar", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to upload avatar");
+      }
+
+      setProfile(data.profile);
+      setToast({
+        show: true,
+        message: "Avatar uploaded successfully!",
+        type: "success",
+      });
+    } catch (error: any) {
+      setToast({
+        show: true,
+        message: error.message,
+        type: "error",
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    setUploadingAvatar(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      setUploadingAvatar(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/profile/avatar", {
+        method: "DELETE",
+        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to remove avatar");
+      }
+
+      setProfile(data.profile);
+      setToast({
+        show: true,
+        message: "Avatar removed successfully!",
+        type: "success",
+      });
+    } catch (error: any) {
+      setToast({
+        show: true,
+        message: error.message,
+        type: "error",
+      });
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -163,25 +337,125 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     return key.substring(0, 10) + "•••••••••••••••••••";
   };
 
+  const formatJoinedDate = (date: string) => {
+    return new Date(date).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
   return (
     <>
       <Modal isOpen={isOpen} onClose={onClose} title="Profile Settings" size="lg">
         <div className="space-y-6">
-          {/* User Info */}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-300">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              readOnly
-              className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-slate-400 outline-none"
+          {/* Avatar Upload Section */}
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <h3 className="mb-4 text-sm font-semibold text-slate-100">Avatar</h3>
+            <AvatarUpload
+              currentAvatar={profile?.avatar_url}
+              fallbackText={displayName || username || email}
+              onUpload={handleAvatarUpload}
+              onRemove={handleAvatarRemove}
+              loading={uploadingAvatar}
             />
           </div>
 
+          {/* Profile Info Section */}
+          <div className="space-y-4">
+            {/* Email (Read-only) */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-300">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                readOnly
+                className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-slate-400 outline-none"
+              />
+            </div>
+
+            {/* Username */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-300">
+                Username
+              </label>
+              <div className="relative">
+                <FiUser className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                  placeholder="username"
+                  maxLength={20}
+                  pattern="[a-z0-9_]{3,20}"
+                  className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 pl-10 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
+                />
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                3-20 characters, lowercase letters, numbers, and underscores only
+              </p>
+            </div>
+
+            {/* Display Name */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-300">
+                Display Name
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Your Name"
+                maxLength={50}
+                className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
+              />
+            </div>
+
+            {/* Bio */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-300">
+                Bio
+              </label>
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="Tell us about yourself..."
+                maxLength={500}
+                rows={3}
+                className="w-full resize-none rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                {bio.length}/500 characters
+              </p>
+            </div>
+
+            {/* Joined Date */}
+            {profile?.created_at && (
+              <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black px-3 py-2">
+                <FiCalendar className="h-4 w-4 text-slate-500" />
+                <div>
+                  <p className="text-xs text-slate-500">Joined</p>
+                  <p className="text-sm text-slate-300">
+                    {formatJoinedDate(profile.created_at)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Update Button */}
+            <button
+              onClick={handleUpdateProfile}
+              disabled={updatingProfile}
+              className="w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {updatingProfile ? "Updating..." : "Update Profile"}
+            </button>
+          </div>
+
           {/* API Keys Section */}
-          <div>
+          <div className="border-t border-white/10 pt-6">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-slate-100">API Keys</h3>
