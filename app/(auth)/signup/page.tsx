@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 import { validateEmail, validatePassword } from "@/lib/validation";
+import { logger } from "@/lib/logger";
 import { FiEye, FiEyeOff, FiAlertCircle, FiLoader, FiCheck, FiX } from "react-icons/fi";
 import { FcGoogle } from "react-icons/fc";
 
@@ -140,6 +141,9 @@ export default function SignupPage() {
         console.error('Profile creation error:', profileError);
         // Don't block signup if profile creation fails
       }
+
+      // Log successful signup
+      logger.auth.signup(data.user.id, { username: username.trim(), email });
     }
 
     setLoading(false);

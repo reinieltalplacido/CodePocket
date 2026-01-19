@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
+import { logger } from "@/lib/logger";
 import { FiEye, FiEyeOff, FiAlertCircle, FiLoader, FiCheck } from "react-icons/fi";
 import { FcGoogle } from "react-icons/fc";
 
@@ -37,6 +38,9 @@ export default function LoginPage() {
       if (error) {
         setErrorMsg(error.message);
         setLoading(false);
+      } else {
+        // Log OAuth attempt
+        logger.auth.oauthAttempt('google');
       }
       // If successful, user will be redirected to Google
     } catch (err) {
@@ -70,7 +74,7 @@ export default function LoginPage() {
       },
     });
 
-    const { error } = await customSupabase.auth.signInWithPassword({
+    const { data, error } = await customSupabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -79,7 +83,14 @@ export default function LoginPage() {
 
     if (error) {
       setErrorMsg(error.message);
+      // Log failed login attempt
+      logger.auth.failedLogin(email, error.message);
       return;
+    }
+
+    // Log successful login
+    if (data.user) {
+      logger.auth.login(data.user.id, { keepSignedIn });
     }
 
     router.push("/dashboard");
