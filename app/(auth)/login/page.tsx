@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 import { FiEye, FiEyeOff, FiAlertCircle, FiLoader, FiCheck } from "react-icons/fi";
+import { FcGoogle } from "react-icons/fc";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,6 +20,29 @@ export default function LoginPage() {
   const handleEmailChange = (value: string) => {
     setEmail(value);
     setEmailError(null);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setErrorMsg(null);
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+
+      if (error) {
+        setErrorMsg(error.message);
+        setLoading(false);
+      }
+      // If successful, user will be redirected to Google
+    } catch (err) {
+      setErrorMsg('Failed to initialize Google sign-in');
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -190,6 +214,31 @@ export default function LoginPage() {
               <div className="absolute inset-0 -z-0 bg-gradient-to-r from-emerald-400 to-emerald-500 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           </form>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-white/10"></div>
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-gradient-to-b from-slate-900/90 to-slate-950/90 px-3 text-slate-400">
+                or continue with
+              </span>
+            </div>
+          </div>
+
+          {/* Google Sign-In Button */}
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            disabled={loading}
+            className="group relative w-full overflow-hidden rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white shadow-lg transition-all hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <span className="relative z-10 flex items-center justify-center gap-3">
+              <FcGoogle className="h-5 w-5" />
+              Continue with Google
+            </span>
+          </button>
 
           {/* Footer */}
           <div className="mt-6 text-center">
