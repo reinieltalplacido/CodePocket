@@ -31,7 +31,7 @@ export default function AdminLogsPage() {
   useEffect(() => {
     const password = sessionStorage.getItem("admin_password");
     if (!password) {
-      router.push("/admin");
+      router.push("/adminoreo");
       return;
     }
 
@@ -47,7 +47,7 @@ export default function AdminLogsPage() {
       });
 
       if (!response.ok) {
-        router.push("/admin");
+        router.push("/adminoreo");
         return;
       }
 
@@ -62,7 +62,7 @@ export default function AdminLogsPage() {
 
   const handleLogout = () => {
     sessionStorage.removeItem("admin_password");
-    router.push("/admin");
+    router.push("/adminoreo");
   };
 
   const filteredLogs = analytics?.recentLogs.filter((log) => {
