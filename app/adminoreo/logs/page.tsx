@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FiActivity, FiAlertCircle, FiUsers, FiFilter, FiSearch, FiLogOut } from "react-icons/fi";
+import { FiActivity, FiAlertCircle, FiUsers, FiFilter, FiSearch, FiLogOut, FiRefreshCw } from "react-icons/fi";
 
 type Log = {
   id: string;
@@ -27,6 +27,8 @@ export default function AdminLogsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   useEffect(() => {
     const password = sessionStorage.getItem("admin_password");
@@ -38,7 +40,11 @@ export default function AdminLogsPage() {
     fetchAnalytics(password);
   }, [router]);
 
-  const fetchAnalytics = async (password: string) => {
+  const fetchAnalytics = async (password: string, isAutoRefresh = false) => {
+    if (isAutoRefresh) {
+      setIsRefreshing(true);
+    }
+
     try {
       const response = await fetch("/api/logs/analytics", {
         headers: {
@@ -53,12 +59,26 @@ export default function AdminLogsPage() {
 
       const data = await response.json();
       setAnalytics(data);
+      setLastUpdated(new Date());
     } catch (error) {
       console.error("Failed to fetch analytics:", error);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
+
+  // Auto-refresh every 5 seconds
+  useEffect(() => {
+    const password = sessionStorage.getItem("admin_password");
+    if (!password) return;
+
+    const interval = setInterval(() => {
+      fetchAnalytics(password, true);
+    }, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     sessionStorage.removeItem("admin_password");
@@ -89,7 +109,15 @@ export default function AdminLogsPage() {
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
-            <p className="text-slate-400">System logs and analytics</p>
+            <div className="flex items-center gap-2">
+              <p className="text-slate-400">System logs and analytics</p>
+              <span className="text-xs text-slate-500">
+                • Last updated: {lastUpdated.toLocaleTimeString()}
+              </span>
+              {isRefreshing && (
+                <FiRefreshCw className="h-3 w-3 animate-spin text-emerald-400" />
+              )}
+            </div>
           </div>
           <button
             onClick={handleLogout}
