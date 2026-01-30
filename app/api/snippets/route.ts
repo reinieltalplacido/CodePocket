@@ -6,14 +6,35 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-async function validateApiKey(apiKey: string) {
+// In-memory cache for API key validation (5 min TTL)
+const apiKeyCache = new Map<string, { userId: string; expires: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function validateApiKey(apiKey: string): Promise<string | null> {
+  // Check cache first
+  const cached = apiKeyCache.get(apiKey);
+  if (cached && cached.expires > Date.now()) {
+    return cached.userId;
+  }
+
+  // Query database
   const { data } = await supabase
     .from("api_keys")
     .select("user_id")
     .eq("api_key", apiKey)
+    .limit(1)
     .single();
 
-  return data?.user_id || null;
+  if (data?.user_id) {
+    // Cache the result
+    apiKeyCache.set(apiKey, {
+      userId: data.user_id,
+      expires: Date.now() + CACHE_TTL
+    });
+    return data.user_id;
+  }
+
+  return null;
 }
 
 // GET /api/snippets
@@ -32,16 +53,17 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("snippets")
-    // include all fields you need on cards (add folder_name if you have it)
     .select("id, title, code, language, description, tags, folder_id, source, created_at")
     .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+    .is("deleted_at", null) // Exclude deleted snippets
+    .order("created_at", { ascending: false })
+    .limit(1000); // Reasonable limit to prevent huge responses
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ snippets: data });
+  return NextResponse.json({ snippets: data || [] });
 }
 
 // POST /api/snippets (used by VS Code and web)
@@ -52,13 +74,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "API key required" }, { status: 401 });
   }
 
-  const userId = await validateApiKey(apiKey);
+  // Parse body and validate API key in parallel
+  const [body, userId] = await Promise.all([
+    request.json(),
+    validateApiKey(apiKey)
+  ]);
 
   if (!userId) {
     return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
   }
 
-  const body = await request.json();
   const {
     title,
     code,
@@ -66,9 +91,10 @@ export async function POST(request: NextRequest) {
     description,
     tags,
     folder_id,
-    source = "web" // default when not provided
+    source = "web"
   } = body;
 
+  // Early validation
   if (!title || !code) {
     return NextResponse.json(
       { error: "Title and code are required" },
@@ -76,6 +102,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Optimized insert - only select necessary fields
   const { data, error } = await supabase
     .from("snippets")
     .insert({
@@ -88,7 +115,7 @@ export async function POST(request: NextRequest) {
       folder_id,
       source
     })
-    .select()
+    .select("id, title, language, created_at")
     .single();
 
   if (error) {

@@ -63,6 +63,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState("all");
+  const [selectedDateRange, setSelectedDateRange] = useState("all");
+  const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
+  const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [snippetToDelete, setSnippetToDelete] = useState<Snippet | null>(null);
   const [toast, setToast] = useState<{
@@ -73,6 +77,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchSnippets();
+    
+    // Load saved filter preferences from localStorage
+    const savedLanguage = localStorage.getItem('dashboard_language_filter');
+    const savedDateRange = localStorage.getItem('dashboard_date_filter');
+    
+    if (savedLanguage) {
+      setSelectedLanguage(savedLanguage);
+    }
+    if (savedDateRange) {
+      setSelectedDateRange(savedDateRange);
+    }
   }, []);
 
   // realtime inserts/deletes/updates
@@ -163,11 +178,95 @@ export default function DashboardPage() {
     }
   };
 
-  const filteredSnippets = snippets.filter(
-    (s) =>
-      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.code.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setLanguageDropdownOpen(false);
+      setDateDropdownOpen(false);
+    };
+    
+    if (languageDropdownOpen || dateDropdownOpen) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [languageDropdownOpen, dateDropdownOpen]);
+
+  // Save language filter preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('dashboard_language_filter', selectedLanguage);
+  }, [selectedLanguage]);
+
+  // Save date range filter preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('dashboard_date_filter', selectedDateRange);
+  }, [selectedDateRange]);
+
+  // Extract unique languages from snippets
+  const uniqueLanguages = Array.from(
+    new Set(snippets.map((s) => s.language))
+  ).sort();
+
+  // Date range options
+  const dateRanges = [
+    { value: "all", label: "All Time" },
+    { value: "recently", label: "Recently Added" },
+    { value: "today", label: "Today" },
+    { value: "week", label: "Last 7 Days" },
+    { value: "month", label: "Last 30 Days" },
+    { value: "quarter", label: "Last 90 Days" },
+  ];
+
+  // Filter snippets by search, language, and date range
+  const filteredSnippets = snippets
+    .filter((s) => {
+      // Search filter
+      const matchesSearch =
+        s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.code.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // Language filter
+      const matchesLanguage =
+        selectedLanguage === "all" || s.language === selectedLanguage;
+      
+      // Date range filter
+      let matchesDateRange = true;
+      if (selectedDateRange !== "all") {
+        const now = new Date();
+        const snippetDate = new Date(s.created_at);
+        const daysDiff = Math.floor(
+          (now.getTime() - snippetDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
+
+        switch (selectedDateRange) {
+          case "today":
+            matchesDateRange = daysDiff === 0;
+            break;
+          case "week":
+            matchesDateRange = daysDiff <= 7;
+            break;
+          case "month":
+            matchesDateRange = daysDiff <= 30;
+            break;
+          case "quarter":
+            matchesDateRange = daysDiff <= 90;
+            break;
+          case "recently":
+            // Recently added will be handled by sorting
+            matchesDateRange = true;
+            break;
+        }
+      }
+
+      return matchesSearch && matchesLanguage && matchesDateRange;
+    })
+    .sort((a, b) => {
+      // Sort by recently added if selected
+      if (selectedDateRange === "recently") {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      // Default sort (already sorted by created_at desc from query)
+      return 0;
+    });
 
   const openConfirm = (snippet: Snippet) => {
     setSnippetToDelete(snippet);
@@ -276,6 +375,227 @@ const toggleFavorite = async (snippet: Snippet) => {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full rounded-lg border border-white/10 bg-black py-2.5 pl-10 pr-4 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
         />
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Language Filter */}
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setLanguageDropdownOpen(!languageDropdownOpen);
+                setDateDropdownOpen(false);
+              }}
+              className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 transition-all hover:border-emerald-500/30 hover:bg-white/10"
+            >
+              <FiCode className="h-4 w-4" />
+              <span>
+                {selectedLanguage === "all"
+                  ? "All Languages"
+                  : prettyLanguage(selectedLanguage)}
+              </span>
+              <svg
+                className={`h-4 w-4 transition-transform ${
+                  languageDropdownOpen ? "rotate-180" : ""
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            {languageDropdownOpen && (
+              <div className="absolute left-0 top-full z-50 mt-2 w-56 rounded-lg border border-white/10 bg-zinc-950 shadow-xl">
+                <div className="max-h-64 overflow-y-auto p-1">
+                  <button
+                    onClick={() => {
+                      setSelectedLanguage("all");
+                      setLanguageDropdownOpen(false);
+                    }}
+                    className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                      selectedLanguage === "all"
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : "text-slate-300 hover:bg-white/5"
+                    }`}
+                  >
+                    All Languages
+                    <span className="ml-2 text-xs text-slate-500">
+                      ({snippets.length})
+                    </span>
+                  </button>
+                  {uniqueLanguages.map((lang) => {
+                    const count = snippets.filter((s) => s.language === lang).length;
+                    return (
+                      <button
+                        key={lang}
+                        onClick={() => {
+                          setSelectedLanguage(lang);
+                          setLanguageDropdownOpen(false);
+                        }}
+                        className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                          selectedLanguage === lang
+                            ? "bg-emerald-500/20 text-emerald-400"
+                            : "text-slate-300 hover:bg-white/5"
+                        }`}
+                      >
+                        {prettyLanguage(lang)}
+                        <span className="ml-2 text-xs text-slate-500">
+                          ({count})
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Date Range Filter */}
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setDateDropdownOpen(!dateDropdownOpen);
+                setLanguageDropdownOpen(false);
+              }}
+              className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 transition-all hover:border-emerald-500/30 hover:bg-white/10"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <span>
+                {dateRanges.find((d) => d.value === selectedDateRange)?.label ||
+                  "All Time"}
+              </span>
+              <svg
+                className={`h-4 w-4 transition-transform ${
+                  dateDropdownOpen ? "rotate-180" : ""
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            {dateDropdownOpen && (
+              <div className="absolute left-0 top-full z-50 mt-2 w-48 rounded-lg border border-white/10 bg-zinc-950 shadow-xl">
+                <div className="p-1">
+                  {dateRanges.map((range) => (
+                    <button
+                      key={range.value}
+                      onClick={() => {
+                        setSelectedDateRange(range.value);
+                        setDateDropdownOpen(false);
+                      }}
+                      className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                        selectedDateRange === range.value
+                          ? "bg-emerald-500/20 text-emerald-400"
+                          : "text-slate-300 hover:bg-white/5"
+                      }`}
+                    >
+                      {range.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Clear Filters Button */}
+          {(selectedLanguage !== "all" || selectedDateRange !== "all") && (
+            <button
+              onClick={() => {
+                setSelectedLanguage("all");
+                setSelectedDateRange("all");
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-400 transition-all hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+              Clear Filters
+            </button>
+          )}
+        </div>
+
+        {/* Active Filters Display */}
+        {(selectedLanguage !== "all" || selectedDateRange !== "all") && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-slate-500">Active filters:</span>
+            {selectedLanguage !== "all" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-emerald-400">
+                <FiCode className="h-3 w-3" />
+                {prettyLanguage(selectedLanguage)}
+                <button
+                  onClick={() => setSelectedLanguage("all")}
+                  className="ml-0.5 hover:text-emerald-300"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            {selectedDateRange !== "all" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5 py-1 text-sky-400">
+                <svg
+                  className="h-3 w-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+                {dateRanges.find((d) => d.value === selectedDateRange)?.label}
+                <button
+                  onClick={() => setSelectedDateRange("all")}
+                  className="ml-0.5 hover:text-sky-300"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Snippets Grid */}
