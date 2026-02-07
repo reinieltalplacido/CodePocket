@@ -1,6 +1,7 @@
 // app/api/invitations/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { NextRequest, NextResponse } from "next/server";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { invitationCache, authCache } from "@/lib/cache-utils";
 
 /**
  * GET /api/invitations
@@ -9,51 +10,82 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
-    
+
     // Try to get user from Authorization header first
-    const authHeader = request.headers.get('authorization');
+    const authHeader = request.headers.get("authorization");
     let user = null;
-    
-    if (authHeader?.startsWith('Bearer ')) {
+
+    if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
-      const { data: { user: tokenUser }, error: tokenError } = await supabase.auth.getUser(token);
-      if (!tokenError && tokenUser) {
+
+      // Check auth cache
+      const cachedAuth = authCache.get(token);
+      if (cachedAuth) {
+        const {
+          data: { user: tokenUser },
+        } = await supabase.auth.getUser(token);
         user = tokenUser;
+      } else {
+        const {
+          data: { user: tokenUser },
+          error: tokenError,
+        } = await supabase.auth.getUser(token);
+        if (!tokenError && tokenUser) {
+          user = tokenUser;
+          authCache.set(token, { userId: tokenUser.id });
+        }
       }
     }
-    
+
     // Fallback to cookie-based auth
     if (!user) {
-      const { data: { user: cookieUser }, error: authError } = await supabase.auth.getUser();
+      const {
+        data: { user: cookieUser },
+        error: authError,
+      } = await supabase.auth.getUser();
       if (!authError && cookieUser) {
         user = cookieUser;
       }
     }
-    
+
     if (!user || !user.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Check invitation cache
+    const cacheKey = `invitations:pending:${user.email}`;
+    const cached = invitationCache.get(cacheKey);
+
+    if (cached) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
+        { invitations: cached },
+        {
+          headers: {
+            "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+            "X-Cache": "HIT",
+          },
+        },
       );
     }
 
     // Use service role client for queries
-    const { createClient } = await import('@supabase/supabase-js');
+    const { createClient } = await import("@supabase/supabase-js");
     const serviceClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         auth: {
           autoRefreshToken: false,
-          persistSession: false
-        }
-      }
+          persistSession: false,
+        },
+      },
     );
 
     // Get pending invitations for this user's email
     const { data: invitations, error } = await serviceClient
-      .from('group_invitations')
-      .select(`
+      .from("group_invitations")
+      .select(
+        `
         id,
         group_id,
         email,
@@ -64,25 +96,37 @@ export async function GET(request: NextRequest) {
           name,
           description
         )
-      `)
-      .eq('email', user.email.toLowerCase())
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false });
+      `,
+      )
+      .eq("email", user.email.toLowerCase())
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
 
     if (error) {
-      console.error('Error fetching invitations:', error);
+      console.error("Error fetching invitations:", error);
       return NextResponse.json(
-        { error: 'Failed to fetch invitations' },
-        { status: 500 }
+        { error: "Failed to fetch invitations" },
+        { status: 500 },
       );
     }
 
-    return NextResponse.json({ invitations: invitations || [] });
-  } catch (error) {
-    console.error('Error in GET /api/invitations:', error);
+    // Cache the result
+    invitationCache.set(cacheKey, invitations || []);
+
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { invitations: invitations || [] },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+          "X-Cache": "MISS",
+        },
+      },
+    );
+  } catch (error) {
+    console.error("Error in GET /api/invitations:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
     );
   }
 }
@@ -94,32 +138,46 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
-    
+
     // Try to get user from Authorization header first
-    const authHeader = request.headers.get('authorization');
+    const authHeader = request.headers.get("authorization");
     let user = null;
-    
-    if (authHeader?.startsWith('Bearer ')) {
+
+    if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
-      const { data: { user: tokenUser }, error: tokenError } = await supabase.auth.getUser(token);
-      if (!tokenError && tokenUser) {
+
+      // Check auth cache
+      const cachedAuth = authCache.get(token);
+      if (cachedAuth) {
+        const {
+          data: { user: tokenUser },
+        } = await supabase.auth.getUser(token);
         user = tokenUser;
+      } else {
+        const {
+          data: { user: tokenUser },
+          error: tokenError,
+        } = await supabase.auth.getUser(token);
+        if (!tokenError && tokenUser) {
+          user = tokenUser;
+          authCache.set(token, { userId: tokenUser.id });
+        }
       }
     }
-    
+
     // Fallback to cookie-based auth
     if (!user) {
-      const { data: { user: cookieUser }, error: authError } = await supabase.auth.getUser();
+      const {
+        data: { user: cookieUser },
+        error: authError,
+      } = await supabase.auth.getUser();
       if (!authError && cookieUser) {
         user = cookieUser;
       }
     }
-    
+
     if (!user || !user.email) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Parse request body
@@ -128,106 +186,116 @@ export async function POST(request: NextRequest) {
 
     if (!invitation_id || !action) {
       return NextResponse.json(
-        { error: 'invitation_id and action are required' },
-        { status: 400 }
+        { error: "invitation_id and action are required" },
+        { status: 400 },
       );
     }
 
-    if (action !== 'accept' && action !== 'decline') {
+    if (action !== "accept" && action !== "decline") {
       return NextResponse.json(
         { error: 'action must be either "accept" or "decline"' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Use service role client for database operations
-    const { createClient } = await import('@supabase/supabase-js');
+    const { createClient } = await import("@supabase/supabase-js");
     const serviceClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         auth: {
           autoRefreshToken: false,
-          persistSession: false
-        }
-      }
+          persistSession: false,
+        },
+      },
     );
 
     // Get the invitation
     const { data: invitation, error: inviteError } = await serviceClient
-      .from('group_invitations')
-      .select('*')
-      .eq('id', invitation_id)
-      .eq('email', user.email.toLowerCase())
-      .eq('status', 'pending')
+      .from("group_invitations")
+      .select("*")
+      .eq("id", invitation_id)
+      .eq("email", user.email.toLowerCase())
+      .eq("status", "pending")
       .single();
 
     if (inviteError || !invitation) {
-      console.error('Error fetching invitation:', inviteError);
+      console.error("Error fetching invitation:", inviteError);
       return NextResponse.json(
-        { error: 'Invitation not found' },
-        { status: 404 }
+        { error: "Invitation not found" },
+        { status: 404 },
       );
     }
 
     // Check if invitation has expired
     if (new Date(invitation.expires_at) < new Date()) {
       await serviceClient
-        .from('group_invitations')
-        .update({ status: 'expired' })
-        .eq('id', invitation_id);
+        .from("group_invitations")
+        .update({ status: "expired" })
+        .eq("id", invitation_id);
 
       return NextResponse.json(
-        { error: 'Invitation has expired' },
-        { status: 400 }
+        { error: "Invitation has expired" },
+        { status: 400 },
       );
     }
 
-    if (action === 'accept') {
+    if (action === "accept") {
       // Add user to group
       const { error: memberError } = await serviceClient
-        .from('group_members')
+        .from("group_members")
         .insert({
           group_id: invitation.group_id,
           user_id: user.id,
         });
 
       if (memberError) {
-        console.error('Error adding member:', memberError);
+        console.error("Error adding member:", memberError);
         return NextResponse.json(
-          { error: 'Failed to join group' },
-          { status: 500 }
+          { error: "Failed to join group" },
+          { status: 500 },
         );
       }
 
+      // Invalidate group cache for this user (they joined a new group)
+      const { groupCache } = await import("@/lib/cache-utils");
+      groupCache.delete(`groups:list:${user.id}`);
+
       // Mark invitation as accepted
       await serviceClient
-        .from('group_invitations')
-        .update({ status: 'accepted' })
-        .eq('id', invitation_id);
+        .from("group_invitations")
+        .update({ status: "accepted" })
+        .eq("id", invitation_id);
 
-      return NextResponse.json({ 
+      // Invalidate invitation cache
+      invitationCache.delete(`invitations:pending:${user.email}`);
+
+      return NextResponse.json({
         success: true,
-        message: 'Invitation accepted',
-        group_id: invitation.group_id
+        message: "Invitation accepted",
+        group_id: invitation.group_id,
       });
     } else {
       // Mark invitation as declined
       await serviceClient
-        .from('group_invitations')
-        .update({ status: 'declined' })
-        .eq('id', invitation_id);
+        .from("group_invitations")
+        .update({ status: "declined" })
+        .eq("id", invitation_id);
 
-      return NextResponse.json({ 
+      // Invalidate invitation cache
+      invitationCache.delete(`invitations:pending:${user.email}`);
+
+      return NextResponse.json({
         success: true,
-        message: 'Invitation declined'
+        message: "Invitation declined",
       });
     }
   } catch (error) {
-    console.error('Error in POST /api/invitations:', error);
+    console.error("Error in POST /api/invitations:", error);
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: "Internal server error" },
+      { status: 500 },
     );
   }
 }
