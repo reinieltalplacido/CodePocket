@@ -117,8 +117,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black">
         <div className="text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30">
-            <span className="text-2xl font-bold text-white">CP</span>
+          <div className="mb-4 text-2xl font-bold text-emerald-400">
+            CodePocket
           </div>
           <div className="mt-4 h-1 w-48 overflow-hidden rounded-full bg-white/10">
             <div className="h-full w-1/2 animate-pulse bg-emerald-500"></div>
@@ -174,9 +174,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         {/* Logo */}
         <div className="flex items-center gap-3 border-b border-white/5 px-4 py-5">
-          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/25">
-            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-            <span className="relative text-lg font-bold text-white">CP</span>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 border border-emerald-500/30">
+            <FiCode className="h-5 w-5 text-emerald-400" />
           </div>
           {!collapsed && (
             <div className="flex flex-col">

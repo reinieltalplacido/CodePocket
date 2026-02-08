@@ -109,9 +109,6 @@ export default function LoginPage() {
         <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900/90 to-slate-950/90 p-6 shadow-2xl backdrop-blur-xl md:p-8">
           {/* Header */}
           <div className="mb-8 text-center">
-            <div className="mb-3 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30">
-              <span className="text-2xl font-bold text-white">CP</span>
-            </div>
             <h1 className="mb-2 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-3xl font-bold text-transparent">
               Welcome back
             </h1>

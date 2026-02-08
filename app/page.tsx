@@ -29,9 +29,6 @@ export default function Home() {
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#0a0e1a]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/30">
-              <span className="text-lg font-bold text-white">CP</span>
-            </div>
             <span className="text-xl font-bold tracking-tight">
               Code<span className="text-emerald-400">Pocket</span>
             </span>
@@ -84,10 +81,9 @@ export default function Home() {
               </Link>
               <Link
                 href="/login"
-                className="group flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-8 py-3.5 text-base font-medium text-slate-300 transition-all hover:border-white/20 hover:bg-white/10"
+                className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-8 py-3.5 text-base font-medium text-slate-300 transition-all hover:border-white/20 hover:bg-white/10"
               >
                 Sign in
-                <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
               </Link>
             </div>
           </div>
@@ -117,10 +113,9 @@ export default function Home() {
                 </Link>
                 <Link
                   href="/login"
-                  className="group flex items-center gap-2 text-base font-medium text-slate-300 transition-colors hover:text-white"
+                  className="flex items-center gap-2 text-base font-medium text-slate-300 transition-colors hover:text-white"
                 >
                   Learn more
-                  <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
                 </Link>
               </div>
             </div>
@@ -131,9 +126,6 @@ export default function Home() {
                 {/* Dashboard Header */}
                 <div className="border-b border-white/10 bg-slate-900/80 px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500">
-                      <span className="text-lg font-bold text-white">CP</span>
-                    </div>
                     <div>
                       <div className="text-sm font-semibold text-slate-100">CodePocket</div>
                       <div className="text-xs text-slate-500">Snippet Manager</div>
