@@ -20,7 +20,6 @@ type User = {
   username: string;
   created_at: string;
   snippet_count: number;
-  group_count: number;
   avatar_url?: string;
 };
 
@@ -186,12 +185,12 @@ export default function AdminUsersPage() {
             </div>
 
             <div className="rounded-xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 p-6">
-              <div className="mb-2 flex items-center gap-2 text-purple-400">
-                <FiLayers className="h-5 w-5" />
-                <span className="text-sm font-medium">Total Groups</span>
+              <div className="mb-2 flex items-center gap-2 text-emerald-400">
+                <FiUsers className="h-5 w-5" />
+                <span className="text-sm font-medium">Total Users</span>
               </div>
               <p className="text-3xl font-bold text-white">
-                {usersData?.users.reduce((sum, user) => sum + user.group_count, 0) || 0}
+                {usersData?.pagination.totalItems || 0}
               </p>
             </div>
           </div>

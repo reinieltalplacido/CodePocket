@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import { FiPlus, FiSearch, FiCode, FiCopy, FiTrash2, FiStar, FiUsers } from "react-icons/fi";
+import { FiPlus, FiSearch, FiCode, FiCopy, FiTrash2, FiStar } from "react-icons/fi";
 import Toast from "@/components/Toast";
 import CodeBlock from "@/components/CodeBlock";
 import LoadingState from "@/components/LoadingState";
@@ -27,13 +27,6 @@ type Snippet = {
     name: string;
     color: string;
   } | null;
-  group_snippets?: Array<{
-    group_id: string;
-    groups: {
-      id: string;
-      name: string;
-    };
-  }>;
 };
 
 function prettyLanguage(id: string | undefined): string {
@@ -154,13 +147,6 @@ export default function DashboardPage() {
             id,
             name,
             color
-          ),
-          group_snippets (
-            group_id,
-            groups (
-              id,
-              name
-            )
           )
         `)
         .eq("user_id", user.id)
@@ -783,16 +769,6 @@ function SnippetCard({
             {snippet.source && (
               <span className="rounded bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300">
                 {snippet.source === "vscode" ? "VS Code" : "Web"}
-              </span>
-            )}
-
-            {snippet.group_snippets && snippet.group_snippets.length > 0 && (
-              <span 
-                className="flex items-center gap-1 rounded bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-300"
-                title={`Shared to ${snippet.group_snippets.length} group${snippet.group_snippets.length > 1 ? 's' : ''}`}
-              >
-                <FiUsers className="h-2.5 w-2.5" />
-                {snippet.group_snippets.length}
               </span>
             )}
           </div>

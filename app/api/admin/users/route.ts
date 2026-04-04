@@ -50,25 +50,13 @@ export async function GET(request: NextRequest) {
       snippetCountMap[s.user_id] = (snippetCountMap[s.user_id] || 0) + 1;
     });
 
-    // Get group memberships for each user
-    const { data: groupMemberships } = await supabase
-      .from("group_members")
-      .select("user_id")
-      .in("user_id", userIds);
-
-    const groupCountMap: Record<string, number> = {};
-    groupMemberships?.forEach((gm: any) => {
-      groupCountMap[gm.user_id] = (groupCountMap[gm.user_id] || 0) + 1;
-    });
-
     // Enrich user data with email from auth if not in profile
     const enrichedUsers = users.map(user => ({
       id: user.id,
-      email: user.email || user.id, // Use email from profile or fallback to ID
+      email: user.email || user.id,
       username: user.username,
       created_at: user.created_at,
       snippet_count: snippetCountMap[user.id] || 0,
-      group_count: groupCountMap[user.id] || 0,
     }));
 
     return NextResponse.json({

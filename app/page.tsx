@@ -147,8 +147,8 @@ export default function Home() {
                         <span>Favorites</span>
                       </div>
                       <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-400">
-                        <FiUsers className="h-4 w-4" />
-                        <span>Groups</span>
+                        <FiFolder className="h-4 w-4" />
+                        <span>React Hooks</span>
                       </div>
                     </nav>
                     <div className="mt-6">
@@ -395,41 +395,6 @@ export default function Home() {
                     <div className="mb-1 text-sm font-medium text-slate-200">useFetch</div>
                     <div className="text-xs text-slate-500">TypeScript • API Helpers</div>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Feature 4 - Team Collaboration */}
-            <div className={`group col-span-1 md:col-span-3 lg:col-span-2 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-6 backdrop-blur-sm transition-all duration-500 delay-300 hover:border-emerald-500/30 ${featuresAnimation.isVisible ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold text-slate-100">Team Collaboration</h3>
-                <p className="mt-2 text-sm text-slate-400">
-                  Create groups to share snippets with your team and collaborate on code together.
-                </p>
-              </div>
-
-              {/* Team Members Stack */}
-              <div className="flex flex-col items-center justify-center py-6">
-                <div className="flex -space-x-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 ring-4 ring-slate-900 text-white font-semibold text-sm">
-                    JD
-                  </div>
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-cyan-600 ring-4 ring-slate-900 text-white font-semibold text-sm">
-                    AS
-                  </div>
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-purple-600 ring-4 ring-slate-900 text-white font-semibold text-sm">
-                    MK
-                  </div>
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-orange-600 ring-4 ring-slate-900 text-white font-semibold text-sm">
-                    RL
-                  </div>
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-700 ring-4 ring-slate-900 text-slate-300 font-semibold text-xs">
-                    +12
-                  </div>
-                </div>
-                <div className="mt-4 text-center">
-                  <div className="text-sm font-medium text-slate-300">16 team members</div>
-                  <div className="text-xs text-slate-500 mt-1">Sharing 127 snippets</div>
                 </div>
               </div>
             </div>

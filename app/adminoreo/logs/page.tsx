@@ -440,7 +440,6 @@ export default function AdminLogsPage() {
                 <option value="all">All Categories</option>
                 <option value="auth">Auth</option>
                 <option value="snippet">Snippet</option>
-                <option value="group">Group</option>
                 <option value="error">Error</option>
                 <option value="security">Security</option>
               </select>

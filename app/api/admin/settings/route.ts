@@ -27,10 +27,6 @@ export async function GET(request: NextRequest) {
       .select("*", { count: "exact", head: true })
       .is("deleted_at", null);
 
-    const { count: totalGroups } = await supabase
-      .from("groups")
-      .select("*", { count: "exact", head: true });
-
     // Get oldest log for uptime calculation
     const { data: oldestLog } = await supabase
       .from("logs")
@@ -51,7 +47,6 @@ export async function GET(request: NextRequest) {
         totalLogs: totalLogs || 0,
         totalUsers: totalUsers || 0,
         totalSnippets: totalSnippets || 0,
-        totalGroups: totalGroups || 0,
       },
       security: {
         adminPasswordSet: !!process.env.ADMIN_PASSWORD,

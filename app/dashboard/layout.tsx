@@ -21,7 +21,6 @@ import {
   FiHelpCircle,
   FiMenu,
   FiX,
-  FiUsers,
 } from "react-icons/fi";
 
 type Folder = {
@@ -160,16 +159,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             active={pathname === "/dashboard/favorites"}
             onClick={() => {
               router.push("/dashboard/favorites");
-              setIsMobileMenuOpen(false);
-            }}
-          />
-          <SidebarItem
-            icon={<FiUsers className="h-5 w-5" />}
-            label="Groups"
-            collapsed={collapsed}
-            active={pathname?.startsWith("/dashboard/groups")}
-            onClick={() => {
-              router.push("/dashboard/groups");
               setIsMobileMenuOpen(false);
             }}
           />

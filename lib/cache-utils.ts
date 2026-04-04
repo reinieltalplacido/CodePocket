@@ -131,8 +131,6 @@ export class CacheManager<T = any> {
 export const apiKeyCache = new CacheManager<{ userId: string }>(5 * 60 * 1000); // 5 min
 export const snippetCache = new CacheManager<any>(5 * 60 * 1000); // 5 min
 export const profileCache = new CacheManager<any>(10 * 60 * 1000); // 10 min
-export const groupCache = new CacheManager<any>(5 * 60 * 1000); // 5 min
-export const invitationCache = new CacheManager<any>(3 * 60 * 1000); // 3 min
 export const authCache = new CacheManager<{ userId: string }>(5 * 60 * 1000); // 5 min
 
 // Periodic cleanup (every 5 minutes)
@@ -142,8 +140,6 @@ if (typeof setInterval !== "undefined") {
       apiKeyCache.cleanup();
       snippetCache.cleanup();
       profileCache.cleanup();
-      groupCache.cleanup();
-      invitationCache.cleanup();
       authCache.cleanup();
     },
     5 * 60 * 1000,
