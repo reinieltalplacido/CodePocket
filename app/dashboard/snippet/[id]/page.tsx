@@ -8,7 +8,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import CodeBlock from "@/components/CodeBlock";
 import LoadingState from "@/components/LoadingState";
 import ErrorState from "@/components/ErrorState";
-import { FiArrowLeft, FiCopy, FiTrash2, FiEdit2, FiCheck, FiStar } from "react-icons/fi";
+import { FiArrowLeft, FiCopy, FiTrash2, FiEdit2, FiCheck, FiStar, FiFolder } from "react-icons/fi";
 
 type Snippet = {
   id: string;
@@ -19,6 +19,13 @@ type Snippet = {
   tags: string[];
   created_at: string;
   is_favorite?: boolean;
+  folder_id: string | null;
+};
+
+type Folder = {
+  id: string;
+  name: string;
+  color: string;
 };
 
 export default function SnippetDetailPage() {
@@ -30,6 +37,9 @@ export default function SnippetDetailPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showFolderDropdown, setShowFolderDropdown] = useState(false);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [movingFolder, setMovingFolder] = useState(false);
   const [toast, setToast] = useState<{
     show: boolean;
     message: string;
@@ -41,6 +51,7 @@ export default function SnippetDetailPage() {
 
   useEffect(() => {
     fetchSnippet();
+    fetchFolders();
   }, [id]);
 
   const fetchSnippet = async () => {
@@ -55,6 +66,39 @@ export default function SnippetDetailPage() {
       setSnippet(data);
     }
     setLoading(false);
+  };
+
+  const fetchFolders = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("folders")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("name", { ascending: true });
+
+    if (data) setFolders(data);
+  };
+
+  const handleMoveToFolder = async (folderId: string | null) => {
+    setMovingFolder(true);
+    const { error } = await supabase
+      .from("snippets")
+      .update({ folder_id: folderId })
+      .eq("id", id);
+
+    setMovingFolder(false);
+    setShowFolderDropdown(false);
+
+    if (error) {
+      setToast({ show: true, message: error.message, type: "error" });
+      return;
+    }
+
+    setSnippet(prev => prev ? { ...prev, folder_id: folderId } : null);
+    const folderName = folderId ? folders.find(f => f.id === folderId)?.name : "No folder";
+    setToast({ show: true, message: `Moved to ${folderName || "No folder"}`, type: "success" });
   };
 
   const handleCopy = () => {
@@ -201,6 +245,44 @@ export default function SnippetDetailPage() {
                 </>
               )}
             </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowFolderDropdown(!showFolderDropdown)}
+                disabled={movingFolder}
+                className="flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+              >
+                <FiFolder className="h-4 w-4" />
+                {movingFolder ? "Moving..." : "Move to Folder"}
+              </button>
+              {showFolderDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowFolderDropdown(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-white/10 bg-zinc-950 shadow-xl">
+                    <div className="max-h-64 overflow-y-auto py-1">
+                      <button
+                        onClick={() => handleMoveToFolder(null)}
+                        className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-white/5 ${
+                          !snippet.folder_id ? "text-emerald-400" : "text-slate-300"
+                        }`}
+                      >
+                        {!snippet.folder_id && "✓ "}<span className="text-slate-500">No Folder</span>
+                      </button>
+                      {folders.map((folder) => (
+                        <button
+                          key={folder.id}
+                          onClick={() => handleMoveToFolder(folder.id)}
+                          className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-white/5 ${
+                            snippet.folder_id === folder.id ? "text-emerald-400" : "text-slate-300"
+                          }`}
+                        >
+                          {snippet.folder_id === folder.id && "✓ "}{folder.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
             <button
               onClick={() => router.push(`/dashboard/snippet/${id}/edit`)}
               className="flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 sm:px-4"
@@ -224,6 +306,12 @@ export default function SnippetDetailPage() {
             <span className="rounded bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-400">
               {snippet.language}
             </span>
+            {snippet.folder_id && folders.find(f => f.id === snippet.folder_id) && (
+              <span className="rounded bg-blue-500/10 px-3 py-1 text-sm font-medium text-blue-400">
+                <FiFolder className="mr-1 inline h-3 w-3" />
+                {folders.find(f => f.id === snippet.folder_id)?.name}
+              </span>
+            )}
           </div>
 
           {/* Description */}

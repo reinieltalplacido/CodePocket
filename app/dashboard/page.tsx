@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import { FiPlus, FiSearch, FiCode, FiCopy, FiTrash2, FiStar } from "react-icons/fi";
+import { FiPlus, FiSearch, FiCode, FiCopy, FiTrash2, FiStar, FiFolder } from "react-icons/fi";
 import Toast from "@/components/Toast";
 import CodeBlock from "@/components/CodeBlock";
 import LoadingState from "@/components/LoadingState";
@@ -62,6 +62,7 @@ export default function DashboardPage() {
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [snippetToDelete, setSnippetToDelete] = useState<Snippet | null>(null);
+  const [folders, setFolders] = useState<{ id: string; name: string; color: string }[]>([]);
   const [toast, setToast] = useState<{
     show: boolean;
     message: string;
@@ -70,6 +71,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchSnippets();
+    fetchFolders();
     
     // Load saved filter preferences from localStorage
     const savedLanguage = localStorage.getItem('dashboard_language_filter');
@@ -82,6 +84,38 @@ export default function DashboardPage() {
       setSelectedDateRange(savedDateRange);
     }
   }, []);
+
+  const fetchFolders = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("folders")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("name", { ascending: true });
+
+    if (data) setFolders(data);
+  };
+
+  const handleMoveToFolder = async (snippetId: string, folderId: string | null) => {
+    const { error } = await supabase
+      .from("snippets")
+      .update({ folder_id: folderId })
+      .eq("id", snippetId);
+
+    if (error) {
+      setToast({ show: true, message: error.message, type: "error" });
+      return;
+    }
+
+    setSnippets(prev =>
+      prev.map(s => s.id === snippetId ? { ...s, folder_id: folderId } : s)
+    );
+
+    const folderName = folderId ? folders.find(f => f.id === folderId)?.name : "No folder";
+    setToast({ show: true, message: `Moved to ${folderName || "No folder"}`, type: "success" });
+  };
 
   // realtime inserts/deletes/updates
   useEffect(() => {
@@ -618,6 +652,8 @@ const toggleFavorite = async (snippet: Snippet) => {
               snippet={snippet}
               onRequestDelete={openConfirm}
               onToggleFavorite={toggleFavorite}
+              onMoveToFolder={handleMoveToFolder}
+              folders={folders}
             />
           ))}
         </div>
@@ -670,13 +706,18 @@ function SnippetCard({
   snippet,
   onRequestDelete,
   onToggleFavorite,
+  onMoveToFolder,
+  folders,
 }: {
   snippet: Snippet;
   onRequestDelete: (snippet: Snippet) => void;
   onToggleFavorite: (snippet: Snippet) => void;
+  onMoveToFolder: (snippetId: string, folderId: string | null) => void;
+  folders: { id: string; name: string; color: string }[];
 }) {
   const router = useRouter();
   const tags = Array.isArray(snippet.tags) ? snippet.tags : [];
+  const [showFolderDropdown, setShowFolderDropdown] = useState(false);
 
   const handleOpen = () => {
     router.push(`/dashboard/snippet/${snippet.id}`);
@@ -720,6 +761,43 @@ function SnippetCard({
           >
             <FiCopy className="h-3.5 w-3.5" />
           </button>
+          <div className="relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowFolderDropdown(!showFolderDropdown); }}
+              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-xs text-slate-100 hover:bg-black"
+              title="Move to folder"
+            >
+              <FiFolder className="h-3.5 w-3.5" />
+            </button>
+            {showFolderDropdown && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowFolderDropdown(false); }} />
+                <div className="absolute right-0 z-50 mt-1 w-48 rounded-lg border border-white/10 bg-zinc-950 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                  <div className="max-h-48 overflow-y-auto py-1">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onMoveToFolder(snippet.id, null); setShowFolderDropdown(false); }}
+                      className={`w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-white/5 ${
+                        !snippet.folder_id ? "text-emerald-400" : "text-slate-300"
+                      }`}
+                    >
+                      {!snippet.folder_id && "✓ "}<span className="text-slate-500">No Folder</span>
+                    </button>
+                    {folders.map((folder) => (
+                      <button
+                        key={folder.id}
+                        onClick={(e) => { e.stopPropagation(); onMoveToFolder(snippet.id, folder.id); setShowFolderDropdown(false); }}
+                        className={`w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-white/5 ${
+                          snippet.folder_id === folder.id ? "text-emerald-400" : "text-slate-300"
+                        }`}
+                      >
+                        {snippet.folder_id === folder.id && "✓ "}{folder.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           <button
             onClick={handleDeleteClick}
             className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-xs text-red-400 hover:bg-red-500/20"
