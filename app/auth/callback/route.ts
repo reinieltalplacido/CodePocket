@@ -29,7 +29,12 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      const forwardedHost = request.headers.get('x-forwarded-host');
+      const isLocalEnv = process.env.NODE_ENV === 'development';
+      const redirectUrl = isLocalEnv
+        ? `http://${forwardedHost}${next}`
+        : `${origin}${next}`;
+      return NextResponse.redirect(redirectUrl);
     }
   }
 
