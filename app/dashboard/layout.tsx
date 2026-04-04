@@ -1,7 +1,7 @@
 // app/dashboard/layout.tsx
 "use client";
 
-import { useState, useEffect, useRef, ReactNode } from "react";
+import { useState, useEffect, ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 import ProfileModal from "@/components/ProfileModal";
@@ -15,9 +15,6 @@ import {
   FiChevronRight,
   FiCode,
   FiStar,
-  FiUser,
-  FiLogOut,
-  FiChevronDown,
   FiFolder,
   FiPlus,
   FiTrash2,
@@ -40,35 +37,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [showProfileCard, setShowProfileCard] = useState(false);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [folders, setFolders] = useState<Folder[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
-  // Check authentication on mount
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        // No user found, redirect to login
-        router.replace('/login');
-        return;
-      }
-      
-      setIsAuthenticated(true);
-      setIsLoading(false);
-    };
-
-    checkAuth();
-  }, [router]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchFolders();
-    }
-  }, [isAuthenticated]);
+    fetchFolders();
+  }, []);
 
   const fetchFolders = async () => {
     const {
@@ -111,27 +86,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     };
     return colors[color] || colors.emerald;
   };
-
-  // Show loading screen while checking authentication
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <div className="text-center">
-          <div className="mb-4 text-2xl font-bold text-emerald-400">
-            CodePocket
-          </div>
-          <div className="mt-4 h-1 w-48 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full w-1/2 animate-pulse bg-emerald-500"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Don't render dashboard if not authenticated (will redirect)
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <ThemeProvider>

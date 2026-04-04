@@ -61,20 +61,7 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    // Create a custom Supabase client with the appropriate storage option
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    
-    const customSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        storage: keepSignedIn ? window.localStorage : window.sessionStorage,
-      },
-    });
-
-    const { data, error } = await customSupabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
