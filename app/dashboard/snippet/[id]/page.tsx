@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import Toast from "@/components/Toast";
 import ConfirmModal from "@/components/ConfirmModal";
 import CodeBlock from "@/components/CodeBlock";
 import LoadingState from "@/components/LoadingState";
 import ErrorState from "@/components/ErrorState";
+import { useVault } from "@/contexts/VaultContext";
+import { useToast } from "@/contexts/ToastContext";
+import { prettyLanguage } from "@/lib/languages";
 import { FiArrowLeft, FiCopy, FiTrash2, FiEdit2, FiCheck, FiStar, FiFolder } from "react-icons/fi";
 
 type Snippet = {
@@ -22,36 +24,22 @@ type Snippet = {
   folder_id: string | null;
 };
 
-type Folder = {
-  id: string;
-  name: string;
-  color: string;
-};
-
 export default function SnippetDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
+  const { showToast } = useToast();
+  const { folders, notifyMutation } = useVault();
 
   const [snippet, setSnippet] = useState<Snippet | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showFolderDropdown, setShowFolderDropdown] = useState(false);
-  const [folders, setFolders] = useState<Folder[]>([]);
   const [movingFolder, setMovingFolder] = useState(false);
-  const [toast, setToast] = useState<{
-    show: boolean;
-    message: string;
-    type: "success" | "error" | "info";
-  }>({ show: false, message: "", type: "info" });
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchSnippet();
-    fetchFolders();
+    void fetchSnippet();
   }, [id]);
 
   const fetchSnippet = async () => {
@@ -68,19 +56,6 @@ export default function SnippetDetailPage() {
     setLoading(false);
   };
 
-  const fetchFolders = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("folders")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("name", { ascending: true });
-
-    if (data) setFolders(data);
-  };
-
   const handleMoveToFolder = async (folderId: string | null) => {
     setMovingFolder(true);
     const { error } = await supabase
@@ -92,24 +67,21 @@ export default function SnippetDetailPage() {
     setShowFolderDropdown(false);
 
     if (error) {
-      setToast({ show: true, message: error.message, type: "error" });
+      showToast(error.message, "error");
       return;
     }
 
     setSnippet(prev => prev ? { ...prev, folder_id: folderId } : null);
+    notifyMutation("snippets");
     const folderName = folderId ? folders.find(f => f.id === folderId)?.name : "No folder";
-    setToast({ show: true, message: `Moved to ${folderName || "No folder"}`, type: "success" });
+    showToast(`Moved to ${folderName || "No folder"}`, "success");
   };
 
   const handleCopy = () => {
     if (snippet) {
-      navigator.clipboard.writeText(snippet.code);
+      void navigator.clipboard.writeText(snippet.code);
       setCopied(true);
-      setToast({
-        show: true,
-        message: "Code copied to clipboard!",
-        type: "success",
-      });
+      showToast("Code copied to clipboard", "success");
       setTimeout(() => setCopied(false), 2000);
     }
   };
@@ -120,23 +92,13 @@ export default function SnippetDetailPage() {
     const { error } = await supabase.from("snippets").delete().eq("id", id);
 
     if (error) {
-      setToast({
-        show: true,
-        message: error.message,
-        type: "error",
-      });
+      showToast(error.message, "error");
       return;
     }
 
-    setToast({
-      show: true,
-      message: "Snippet deleted successfully!",
-      type: "success",
-    });
-
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 1000);
+    notifyMutation("snippets");
+    showToast("Snippet moved to Archive", "success");
+    router.push("/dashboard");
   };
 
   const toggleFavorite = async () => {
@@ -144,7 +106,6 @@ export default function SnippetDetailPage() {
 
     const newFavoriteState = !snippet.is_favorite;
 
-    // Optimistic update
     setSnippet({ ...snippet, is_favorite: newFavoriteState });
 
     const { error } = await supabase
@@ -153,25 +114,11 @@ export default function SnippetDetailPage() {
       .eq("id", id);
 
     if (error) {
-      // Revert on error
       setSnippet({ ...snippet, is_favorite: !newFavoriteState });
-      setToast({
-        show: true,
-        message: "Failed to update favorite",
-        type: "error",
-      });
+      showToast("Failed to update favorite", "error");
     } else {
-      setToast({
-        show: true,
-        message: newFavoriteState ? "Added to favorites" : "Removed from favorites",
-        type: "success",
-      });
-    }
-  };
-
-  const handleScroll = () => {
-    if (textareaRef.current && lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+      notifyMutation("snippets");
+      showToast(newFavoriteState ? "Added to favorites" : "Removed from favorites", "success");
     }
   };
 
@@ -196,28 +143,31 @@ export default function SnippetDetailPage() {
     <>
       <div className="mx-auto max-w-4xl">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => router.back()}
-              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-100"
+              aria-label="Go back"
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] bg-[#0D1015] text-slate-300 transition-colors hover:border-white/20 hover:text-slate-100"
             >
-              <FiArrowLeft className="h-5 w-5" />
+              <FiArrowLeft className="h-4 w-4" />
             </button>
             <div>
-              <h1 className="text-2xl font-semibold text-slate-100">
+              <h1 className="font-[family-name:var(--font-bricolage)] text-xl font-semibold text-slate-100 sm:text-2xl">
                 {snippet.title}
               </h1>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-0.5 text-xs text-slate-400">
                 Created {new Date(snippet.created_at).toLocaleDateString()}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
               onClick={toggleFavorite}
-              className="flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5"
+              className="flex min-h-[38px] items-center gap-2 rounded-lg border border-white/[0.1] bg-[#0D1015] px-3.5 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.06]"
               title={snippet.is_favorite ? "Remove from favorites" : "Add to favorites"}
             >
               <FiStar
@@ -230,8 +180,9 @@ export default function SnippetDetailPage() {
               {snippet.is_favorite ? "Favorited" : "Favorite"}
             </button>
             <button
+              type="button"
               onClick={handleCopy}
-              className="flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5"
+              className="flex min-h-[38px] items-center gap-2 rounded-lg border border-white/[0.1] bg-[#0D1015] px-3.5 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.06]"
             >
               {copied ? (
                 <>
@@ -247,31 +198,34 @@ export default function SnippetDetailPage() {
             </button>
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setShowFolderDropdown(!showFolderDropdown)}
                 disabled={movingFolder}
-                className="flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                className="flex min-h-[38px] items-center gap-2 rounded-lg border border-white/[0.1] bg-[#0D1015] px-3.5 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.06] disabled:opacity-50"
               >
                 <FiFolder className="h-4 w-4" />
-                {movingFolder ? "Moving..." : "Move to Folder"}
+                {movingFolder ? "Moving..." : "Folder"}
               </button>
               {showFolderDropdown && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowFolderDropdown(false)} />
-                  <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-white/10 bg-zinc-950 shadow-xl">
-                    <div className="max-h-64 overflow-y-auto py-1">
+                  <div className="cp-dropdown-in absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-white/[0.1] bg-[#0D1015] p-1 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.9)]">
+                    <div className="custom-scrollbar max-h-64 overflow-y-auto">
                       <button
+                        type="button"
                         onClick={() => handleMoveToFolder(null)}
-                        className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-white/5 ${
+                        className={`w-full rounded-lg px-3 py-2 text-left text-xs transition-colors hover:bg-white/[0.06] ${
                           !snippet.folder_id ? "text-emerald-400" : "text-slate-300"
                         }`}
                       >
-                        {!snippet.folder_id && "✓ "}<span className="text-slate-500">No Folder</span>
+                        {!snippet.folder_id && "✓ "}<span className="text-slate-400">No Folder</span>
                       </button>
                       {folders.map((folder) => (
                         <button
                           key={folder.id}
+                          type="button"
                           onClick={() => handleMoveToFolder(folder.id)}
-                          className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-white/5 ${
+                          className={`w-full rounded-lg px-3 py-2 text-left text-xs transition-colors hover:bg-white/[0.06] ${
                             snippet.folder_id === folder.id ? "text-emerald-400" : "text-slate-300"
                           }`}
                         >
@@ -284,15 +238,18 @@ export default function SnippetDetailPage() {
               )}
             </div>
             <button
+              type="button"
               onClick={() => router.push(`/dashboard/snippet/${id}/edit`)}
-              className="flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 sm:px-4"
+              className="flex min-h-[38px] items-center gap-2 rounded-lg bg-emerald-500 px-3.5 py-2 text-xs font-semibold text-[#050608] transition-colors hover:bg-emerald-400"
             >
               <FiEdit2 className="h-4 w-4" />
               Edit
             </button>
             <button
+              type="button"
               onClick={() => setShowDeleteConfirm(true)}
-              className="rounded-lg border border-red-500/20 bg-red-500/10 p-2 text-red-400 transition-colors hover:bg-red-500/20"
+              aria-label="Archive snippet"
+              className="flex h-[38px] w-[38px] items-center justify-center rounded-lg border border-red-500/25 bg-red-500/10 text-red-400 transition-colors hover:bg-red-500/20"
             >
               <FiTrash2 className="h-4 w-4" />
             </button>
@@ -303,8 +260,8 @@ export default function SnippetDetailPage() {
         <div className="space-y-6">
           {/* Language badge */}
           <div className="flex items-center gap-2">
-            <span className="rounded bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-400">
-              {snippet.language}
+            <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs font-medium text-emerald-300">
+              {prettyLanguage(snippet.language)}
             </span>
             {snippet.folder_id && folders.find(f => f.id === snippet.folder_id) && (
               <span className="rounded bg-blue-500/10 px-3 py-1 text-sm font-medium text-blue-400">
@@ -356,20 +313,13 @@ export default function SnippetDetailPage() {
 
       <ConfirmModal
         isOpen={showDeleteConfirm}
-        title="Delete Snippet"
-        message="Are you sure you want to delete this snippet? This action cannot be undone."
-        confirmText="Delete"
+        title="Archive Snippet"
+        message={`Move "${snippet.title}" to Archive? You can restore it anytime.`}
+        confirmText="Archive"
         cancelText="Cancel"
-        variant="danger"
+        variant="warning"
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteConfirm(false)}
-      />
-
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        isVisible={toast.show}
-        onClose={() => setToast({ ...toast, show: false })}
       />
     </>
   );

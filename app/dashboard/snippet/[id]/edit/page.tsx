@@ -3,43 +3,21 @@
 import { useState, FormEvent, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import Toast from "@/components/Toast";
 import ConfirmModal from "@/components/ConfirmModal";
 import MonacoEditor from "@/components/MonacoEditor";
 import TagInput from "@/components/TagInput";
 import LoadingState from "@/components/LoadingState";
+import { useVault } from "@/contexts/VaultContext";
+import { useToast } from "@/contexts/ToastContext";
+import { SNIPPET_LANGUAGES } from "@/lib/languages";
 import { FiArrowLeft } from "react-icons/fi";
-
-const LANGUAGES = [
-  "JavaScript",
-  "TypeScript",
-  "Python",
-  "Java",
-  "C++",
-  "C#",
-  "Ruby",
-  "Go",
-  "Rust",
-  "PHP",
-  "Swift",
-  "Kotlin",
-  "HTML",
-  "CSS",
-  "SQL",
-  "Bash",
-  "Other",
-];
-
-type Folder = {
-  id: string;
-  name: string;
-  color: string;
-};
 
 export default function EditSnippetPage() {
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
+  const { showToast } = useToast();
+  const { folders, notifyMutation } = useVault();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -50,14 +28,8 @@ export default function EditSnippetPage() {
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchingLoading, setFetchingLoading] = useState(true);
-  const [folders, setFolders] = useState<Folder[]>([]);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const [toast, setToast] = useState<{
-    show: boolean;
-    message: string;
-    type: "success" | "error" | "info";
-  }>({ show: false, message: "", type: "info" });
 
   const originalDataRef = useRef({
     title: "",
@@ -69,9 +41,8 @@ export default function EditSnippetPage() {
   });
 
   useEffect(() => {
-    fetchFolders();
-    fetchSnippet();
-    fetchTagSuggestions();
+    void fetchSnippet();
+    void fetchTagSuggestions();
   }, [id]);
 
   useEffect(() => {
@@ -86,24 +57,6 @@ export default function EditSnippetPage() {
 
     setHasChanges(changed);
   }, [title, description, code, language, folderId, tags]);
-
-  const fetchFolders = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("folders")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("name", { ascending: true });
-
-    if (data) {
-      setFolders(data);
-    }
-  };
 
   const fetchTagSuggestions = async () => {
     const {
@@ -166,11 +119,7 @@ export default function EditSnippetPage() {
     e.preventDefault();
 
     if (!title.trim() || !code.trim()) {
-      setToast({
-        show: true,
-        message: "Title and code are required",
-        type: "error",
-      });
+      showToast("Title and code are required", "error");
       return;
     }
 
@@ -191,23 +140,13 @@ export default function EditSnippetPage() {
     setLoading(false);
 
     if (error) {
-      setToast({
-        show: true,
-        message: error.message,
-        type: "error",
-      });
+      showToast(error.message, "error");
       return;
     }
 
-    setToast({
-      show: true,
-      message: "Snippet updated successfully!",
-      type: "success",
-    });
-
-    setTimeout(() => {
-      router.replace(`/dashboard/snippet/${id}`);
-    }, 1000);
+    notifyMutation("snippets");
+    showToast("Snippet updated", "success");
+    router.replace(`/dashboard/snippet/${id}`);
   };
 
   const handleCancel = () => {
@@ -280,7 +219,7 @@ export default function EditSnippetPage() {
                   onChange={(e) => setLanguage(e.target.value)}
                   className="flex-1 rounded-lg border border-white/10 bg-black px-3 py-2.5 text-sm text-slate-100 outline-none ring-emerald-500/60 focus:border-emerald-500 focus:ring-2"
                 >
-                  {LANGUAGES.map((lang) => (
+                  {SNIPPET_LANGUAGES.map((lang) => (
                     <option key={lang} value={lang}>
                       {lang}
                     </option>
@@ -378,13 +317,6 @@ export default function EditSnippetPage() {
         variant="warning"
         onConfirm={confirmCancel}
         onCancel={() => setShowCancelConfirm(false)}
-      />
-
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        isVisible={toast.show}
-        onClose={() => setToast({ ...toast, show: false })}
       />
     </>
   );

@@ -2,7 +2,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { ThemeName, DEFAULT_THEME } from "@/lib/themes";
+import { AVAILABLE_THEMES, ThemeName, DEFAULT_THEME } from "@/lib/themes";
 
 type ThemeContextType = {
   theme: ThemeName;
@@ -17,8 +17,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Load theme from localStorage on mount
   useEffect(() => {
-    const savedTheme = localStorage.getItem("codepocket-theme") as ThemeName;
-    if (savedTheme) {
+    const savedTheme = localStorage.getItem("codepocket-theme") as ThemeName | null;
+    if (savedTheme && AVAILABLE_THEMES.some((t) => t.id === savedTheme)) {
       setThemeState(savedTheme);
     }
     setMounted(true);

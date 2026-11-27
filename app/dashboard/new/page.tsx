@@ -1,78 +1,35 @@
 "use client";
 
-import { useState, FormEvent, useRef, useEffect } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
-import Toast from "@/components/Toast";
 import MonacoEditor from "@/components/MonacoEditor";
 import TagInput from "@/components/TagInput";
+import { useVault } from "@/contexts/VaultContext";
+import { useToast } from "@/contexts/ToastContext";
+import { SNIPPET_LANGUAGES } from "@/lib/languages";
 import { FiArrowLeft } from "react-icons/fi";
-
-const LANGUAGES = [
-  "JavaScript",
-  "TypeScript",
-  "Python",
-  "Java",
-  "C++",
-  "C#",
-  "Ruby",
-  "Go",
-  "Rust",
-  "PHP",
-  "Swift",
-  "Kotlin",
-  "HTML",
-  "CSS",
-  "SQL",
-  "Bash",
-  "Other",
-];
-
-type Folder = {
-  id: string;
-  name: string;
-  color: string;
-};
 
 export default function NewSnippetPage() {
   const router = useRouter();
+  const { showToast } = useToast();
+  const { folders, preferences, notifyMutation } = useVault();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [code, setCode] = useState("");
-  const [language, setLanguage] = useState("JavaScript");
+  const [language, setLanguage] = useState<string>(preferences.defaultLanguage || "TypeScript");
   const [folderId, setFolderId] = useState<string>("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [toast, setToast] = useState<{
-    show: boolean;
-    message: string;
-    type: "success" | "error" | "info";
-  }>({ show: false, message: "", type: "info" });
 
   useEffect(() => {
-    fetchFolders();
-    fetchTagSuggestions();
+    setLanguage(preferences.defaultLanguage || "TypeScript");
+  }, [preferences.defaultLanguage]);
+
+  useEffect(() => {
+    void fetchTagSuggestions();
   }, []);
-
-  const fetchFolders = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("folders")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("name", { ascending: true });
-
-    if (data) {
-      setFolders(data);
-    }
-  };
 
   const fetchTagSuggestions = async () => {
     const {
@@ -98,11 +55,7 @@ export default function NewSnippetPage() {
     e.preventDefault();
 
     if (!title.trim() || !code.trim()) {
-      setToast({
-        show: true,
-        message: "Title and code are required",
-        type: "error",
-      });
+      showToast("Title and code are required", "error");
       return;
     }
 
@@ -130,23 +83,13 @@ export default function NewSnippetPage() {
     setLoading(false);
 
     if (error) {
-      setToast({
-        show: true,
-        message: error.message,
-        type: "error",
-      });
+      showToast(error.message, "error");
       return;
     }
 
-    setToast({
-      show: true,
-      message: "Snippet created successfully!",
-      type: "success",
-    });
-
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 1000);
+    notifyMutation("snippets");
+    showToast("Snippet created", "success");
+    router.push("/dashboard");
   };
 
   return (
@@ -178,7 +121,7 @@ export default function NewSnippetPage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Snippet title..."
-                className="w-full rounded-lg border border-white/10 bg-black px-3 py-2.5 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
+                className="w-full rounded-lg border border-white/10 bg-black px-3 py-2.5 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2"
               />
             </div>
 
@@ -202,7 +145,7 @@ export default function NewSnippetPage() {
                   onChange={(e) => setLanguage(e.target.value)}
                   className="flex-1 rounded-lg border border-white/10 bg-black px-3 py-2.5 text-sm text-slate-100 outline-none ring-emerald-500/60 focus:border-emerald-500 focus:ring-2"
                 >
-                  {LANGUAGES.map((lang) => (
+                  {SNIPPET_LANGUAGES.map((lang) => (
                     <option key={lang} value={lang}>
                       {lang}
                     </option>
@@ -241,7 +184,7 @@ export default function NewSnippetPage() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Brief description of this code snippet..."
               rows={2}
-              className="w-full resize-none rounded-lg border border-white/10 bg-black px-3 py-2.5 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
+              className="w-full resize-none rounded-lg border border-white/10 bg-black px-3 py-2.5 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2"
             />
           </div>
 
@@ -276,20 +219,13 @@ export default function NewSnippetPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-2 rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex min-h-[42px] items-center gap-2 rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-[#050608] transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? "Creating..." : "Create Snippet"}
             </button>
           </div>
         </form>
       </div>
-
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        isVisible={toast.show}
-        onClose={() => setToast({ ...toast, show: false })}
-      />
     </>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useTheme } from "@/contexts/ThemeContext";
-import Editor from "@monaco-editor/react";
+import { AVAILABLE_THEMES, ThemeName } from "@/lib/themes";
+import Editor, { useMonaco } from "@monaco-editor/react";
 import { useEffect, useState } from "react";
 
 type MonacoEditorProps = {
@@ -12,6 +13,18 @@ type MonacoEditorProps = {
   readOnly?: boolean;
 };
 
+const MONACO_THEME_MAP: Record<ThemeName, string> = {
+  "vscode-dark": "vs-dark",
+  dracula: "dracula-theme",
+  "github-dark": "github-dark-theme",
+  monokai: "monokai-theme",
+  nord: "nord-theme",
+  "one-dark": "one-dark-theme",
+  "solarized-dark": "solarized-dark-theme",
+};
+
+const stripHash = (hex: string) => hex.replace(/^#/, "");
+
 export default function MonacoEditor({
   value,
   onChange,
@@ -20,33 +33,19 @@ export default function MonacoEditor({
   readOnly = false,
 }: MonacoEditorProps) {
   const { theme } = useTheme();
+  const monaco = useMonaco();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Map app themes to Monaco themes
-  const getMonacoTheme = () => {
-    switch (theme) {
-      case "vscode-dark":
-        return "vs-dark";
-      case "dracula":
-        return "dracula-theme";
-      case "github-dark":
-        return "github-dark-theme";
-      case "monokai":
-        return "monokai-theme";
-      case "nord":
-        return "nord-theme";
-      case "one-dark":
-        return "one-dark-theme";
-      case "solarized-dark":
-        return "solarized-dark-theme";
-      default:
-        return "vs-dark";
-    }
-  };
+  const getMonacoTheme = () => MONACO_THEME_MAP[theme] || "vs-dark";
+
+  useEffect(() => {
+    if (!monaco) return;
+    monaco.editor.setTheme(MONACO_THEME_MAP[theme] || "vs-dark");
+  }, [monaco, theme]);
 
   // Map language names to Monaco language IDs
   const getMonacoLanguage = (lang: string): string => {
@@ -102,7 +101,6 @@ export default function MonacoEditor({
   return (
     <div className="overflow-hidden rounded-lg border border-white/10">
       <Editor
-        key={theme} // Force re-render when theme changes
         height={height}
         language={getMonacoLanguage(language)}
         value={value}
@@ -131,77 +129,41 @@ export default function MonacoEditor({
           // Disable error checking to avoid red squiggly lines
           "semanticHighlighting.enabled": false,
         }}
-        beforeMount={(monaco) => {
+        beforeMount={(monacoInstance) => {
           // Disable all diagnostics (error checking)
-          monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+          monacoInstance.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
             noSemanticValidation: true,
             noSyntaxValidation: true,
           });
-          monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+          monacoInstance.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
             noSemanticValidation: true,
             noSyntaxValidation: true,
           });
 
-          // Define custom themes
-          monaco.editor.defineTheme("dracula-theme", {
-            base: "vs-dark",
-            inherit: true,
-            rules: [],
-            colors: {
-              "editor.background": "#282a36",
-              "editor.foreground": "#f8f8f2",
-            },
-          });
-
-          monaco.editor.defineTheme("nord-theme", {
-            base: "vs-dark",
-            inherit: true,
-            rules: [],
-            colors: {
-              "editor.background": "#2e3440",
-              "editor.foreground": "#d8dee9",
-            },
-          });
-
-          monaco.editor.defineTheme("solarized-dark-theme", {
-            base: "vs-dark",
-            inherit: true,
-            rules: [],
-            colors: {
-              "editor.background": "#002b36",
-              "editor.foreground": "#839496",
-            },
-          });
-
-          monaco.editor.defineTheme("monokai-theme", {
-            base: "vs-dark",
-            inherit: true,
-            rules: [],
-            colors: {
-              "editor.background": "#272822",
-              "editor.foreground": "#f8f8f2",
-            },
-          });
-
-          monaco.editor.defineTheme("one-dark-theme", {
-            base: "vs-dark",
-            inherit: true,
-            rules: [],
-            colors: {
-              "editor.background": "#282c34",
-              "editor.foreground": "#abb2bf",
-            },
-          });
-
-          monaco.editor.defineTheme("github-dark-theme", {
-            base: "vs-dark",
-            inherit: true,
-            rules: [],
-            colors: {
-              "editor.background": "#0d1117",
-              "editor.foreground": "#c9d1d9",
-            },
-          });
+          // Define custom themes with matching background, foreground, and syntax token rules
+          for (const themeConfig of AVAILABLE_THEMES) {
+            if (themeConfig.id === "vscode-dark") continue;
+            const monacoThemeId = MONACO_THEME_MAP[themeConfig.id];
+            monacoInstance.editor.defineTheme(monacoThemeId, {
+              base: "vs-dark",
+              inherit: true,
+              rules: [
+                { token: "", foreground: stripHash(themeConfig.preview.text) },
+                { token: "comment", foreground: stripHash(themeConfig.preview.comment), fontStyle: "italic" },
+                { token: "keyword", foreground: stripHash(themeConfig.preview.keyword) },
+                { token: "string", foreground: stripHash(themeConfig.preview.string) },
+                { token: "number", foreground: stripHash(themeConfig.preview.keyword) },
+                { token: "type", foreground: stripHash(themeConfig.preview.string) },
+                { token: "delimiter", foreground: stripHash(themeConfig.preview.text) },
+              ],
+              colors: {
+                "editor.background": themeConfig.preview.background,
+                "editor.foreground": themeConfig.preview.text,
+                "editorLineNumber.foreground": themeConfig.preview.comment,
+                "editorCursor.foreground": themeConfig.preview.keyword,
+              },
+            });
+          }
         }}
         loading={
           <div className="flex h-full items-center justify-center bg-black">

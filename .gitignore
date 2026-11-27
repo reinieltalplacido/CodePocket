@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# AI Agent harnesses & configurations
+.agent/
+.agents/
+.claude/
+.codex/
+.cursor/
+.devin/
+.gemini/
+.opencode/
+.impeccable/
+skills-lock.json
+GEMINI.md

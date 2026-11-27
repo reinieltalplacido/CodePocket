@@ -1,326 +1,205 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { supabase } from "@/lib/supabase-client";
-import { FiArrowLeft, FiTrash2, FiPlus, FiStar } from "react-icons/fi";
+import { FiArrowLeft, FiFolder, FiPlus, FiTrash2 } from "react-icons/fi";
+import { useVault, type SnippetRecord } from "@/contexts/VaultContext";
+import SnippetCard from "@/components/SnippetCard";
 import ConfirmModal from "@/components/ConfirmModal";
-import Toast from "@/components/Toast";
-import CodeBlock from "@/components/CodeBlock";
+import LoadingState from "@/components/LoadingState";
+import { useToast } from "@/contexts/ToastContext";
 
-type Snippet = {
-  id: string;
-  title: string;
-  description: string | null;
-  code: string;
-  language: string;
-  tags: string[] | null;
-  created_at: string;
-  is_favorite?: boolean;
-};
-
-type Folder = {
-  id: string;
-  name: string;
-  description: string | null;
-  color: string;
+const FOLDER_DOT_COLORS: Record<string, string> = {
+  emerald: "bg-emerald-500",
+  blue: "bg-blue-500",
+  purple: "bg-purple-500",
+  pink: "bg-pink-500",
+  orange: "bg-orange-500",
+  red: "bg-red-500",
 };
 
 export default function FolderPage() {
   const router = useRouter();
   const params = useParams();
   const folderId = params.id as string;
+  const { showToast } = useToast();
+  const {
+    folders,
+    snippets,
+    loading,
+    preferences,
+    toggleFavorite,
+    moveSnippetToFolder,
+    archiveSnippet,
+    deleteFolder,
+  } = useVault();
 
-  const [folder, setFolder] = useState<Folder | null>(null);
-  const [snippets, setSnippets] = useState<Snippet[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [toast, setToast] = useState<{
-    show: boolean;
-    message: string;
-    type: "success" | "error" | "info";
-  }>({ show: false, message: "", type: "info" });
+  const [snippetToDelete, setSnippetToDelete] = useState<SnippetRecord | null>(null);
 
-  useEffect(() => {
-    fetchFolder();
-    fetchSnippets();
-  }, [folderId]);
+  const folder = useMemo(
+    () => folders.find((f) => f.id === folderId) ?? null,
+    [folderId, folders]
+  );
 
-  const fetchFolder = async () => {
-    const { data } = await supabase
-      .from("folders")
-      .select("*")
-      .eq("id", folderId)
-      .single();
-
-    if (data) {
-      setFolder(data);
-    }
-  };
-
-  const fetchSnippets = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from("snippets")
-      .select("*")
-      .eq("folder_id", folderId)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
-
-    if (data) {
-      setSnippets(data);
-    }
-    setLoading(false);
-  };
+  const folderSnippets = useMemo(
+    () => snippets.filter((s) => s.folder_id === folderId),
+    [folderId, snippets]
+  );
 
   const handleDeleteFolder = async () => {
     setShowDeleteConfirm(false);
-
-    const { error } = await supabase.from("folders").delete().eq("id", folderId);
-
-    if (error) {
-      setToast({
-        show: true,
-        message: error.message,
-        type: "error",
-      });
+    const res = await deleteFolder(folderId);
+    if (!res.ok) {
+      showToast(res.error || "Failed to delete folder", "error");
       return;
     }
-
-    setToast({
-      show: true,
-      message: "Folder deleted successfully!",
-      type: "success",
-    });
-
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 1000);
+    router.push("/dashboard");
   };
 
-  const toggleFavorite = async (snippet: Snippet) => {
-    const newFavoriteState = !snippet.is_favorite;
-
-    // Optimistic update
-    setSnippets((prev) =>
-      prev.map((s) =>
-        s.id === snippet.id ? { ...s, is_favorite: newFavoriteState } : s
-      )
-    );
-
-    const { error } = await supabase
-      .from("snippets")
-      .update({ is_favorite: newFavoriteState })
-      .eq("id", snippet.id);
-
-    if (error) {
-      // Revert on error
-      setSnippets((prev) =>
-        prev.map((s) =>
-          s.id === snippet.id ? { ...s, is_favorite: !newFavoriteState } : s
-        )
-      );
-      setToast({
-        show: true,
-        message: "Failed to update favorite",
-        type: "error",
-      });
-    } else {
-      setToast({
-        show: true,
-        message: newFavoriteState ? "Added to favorites" : "Removed from favorites",
-        type: "success",
-      });
-    }
+  const confirmArchiveSnippet = async () => {
+    if (!snippetToDelete) return;
+    const target = snippetToDelete;
+    setSnippetToDelete(null);
+    await archiveSnippet(target);
   };
 
-  const getColorClass = (color: string) => {
-    const colors: Record<string, string> = {
-      emerald: "bg-emerald-500",
-      blue: "bg-blue-500",
-      purple: "bg-purple-500",
-      pink: "bg-pink-500",
-      orange: "bg-orange-500",
-      red: "bg-red-500",
-    };
-    return colors[color] || colors.emerald;
-  };
+  if (loading && !folder) {
+    return <LoadingState message="Loading folder..." />;
+  }
 
-  if (loading || !folder) {
+  if (!folder) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-sm text-slate-400">Loading folder...</p>
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.1] bg-[#0A0D12] px-6 py-16 text-center">
+        <FiFolder className="mb-3 h-8 w-8 text-slate-400" />
+        <h2 className="text-base font-semibold text-slate-200">Folder not found</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          This folder may have been deleted.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push("/dashboard")}
+          className="mt-4 min-h-[40px] rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-[#050608] hover:bg-emerald-400"
+        >
+          Back to All Snippets
+        </button>
       </div>
     );
   }
 
   return (
-    <>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4">
-            <button
-              onClick={() => router.back()}
-              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-100"
-            >
-              <FiArrowLeft className="h-5 w-5" />
-            </button>
-            <div>
-              <div className="flex items-center gap-3">
-                <div
-                  className={`h-3 w-3 rounded-full ${getColorClass(folder.color)}`}
-                />
-                <h1 className="text-2xl font-semibold text-slate-100">
-                  {folder.name}
-                </h1>
-              </div>
-              {folder.description && (
-                <p className="mt-2 text-sm text-slate-400">{folder.description}</p>
-              )}
-              <p className="mt-1 text-xs text-slate-500">
-                {snippets.length} {snippets.length === 1 ? "snippet" : "snippets"}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => router.push("/dashboard/new")}
-              className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-emerald-400"
-            >
-              <FiPlus className="h-4 w-4" />
-              New Snippet
-            </button>
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="rounded-lg border border-red-500/20 bg-red-500/10 p-2 text-red-400 transition-colors hover:bg-red-500/20"
-            >
-              <FiTrash2 className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Snippets Grid */}
-        {snippets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-white/10 py-12">
-            <p className="text-sm text-slate-400">No snippets in this folder yet</p>
-            <button
-              onClick={() => router.push("/dashboard/new")}
-              className="mt-4 text-sm text-emerald-400 hover:text-emerald-300"
-            >
-              Create your first snippet
-            </button>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {snippets.map((snippet) => (
-              <SnippetCard
-                key={snippet.id}
-                snippet={snippet}
-                onToggleFavorite={toggleFavorite}
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            aria-label="Back to snippets"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-[#0D1015] text-slate-300 transition-colors hover:border-white/20 hover:text-white"
+          >
+            <FiArrowLeft className="h-4 w-4" />
+          </button>
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span
+                className={`h-3 w-3 rounded-full ${
+                  FOLDER_DOT_COLORS[folder.color] || FOLDER_DOT_COLORS.emerald
+                }`}
               />
-            ))}
+              <h2 className="font-[family-name:var(--font-bricolage)] text-xl font-semibold text-slate-100 md:text-2xl">
+                {folder.name}
+              </h2>
+            </div>
+            {folder.description && (
+              <p className="mt-1 text-sm text-slate-400">{folder.description}</p>
+            )}
+            <p className="mt-1 text-xs text-slate-400">
+              {folderSnippets.length}{" "}
+              {folderSnippets.length === 1 ? "snippet" : "snippets"}
+            </p>
           </div>
-        )}
-      </div>
-
-      <ConfirmModal
-        isOpen={showDeleteConfirm}
-        title="Delete Folder"
-        message="Are you sure you want to delete this folder? Snippets inside will not be deleted, but they will be moved to 'No Folder'."
-        confirmText="Delete"
-        cancelText="Cancel"
-        variant="danger"
-        onConfirm={handleDeleteFolder}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
-
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        isVisible={toast.show}
-        onClose={() => setToast({ ...toast, show: false })}
-      />
-    </>
-  );
-}
-
-function SnippetCard({
-  snippet,
-  onToggleFavorite,
-}: {
-  snippet: Snippet;
-  onToggleFavorite: (snippet: Snippet) => void;
-}) {
-  const router = useRouter();
-
-  const handleFavoriteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onToggleFavorite(snippet);
-  };
-
-  return (
-    <div
-      onClick={() => router.push(`/dashboard/snippet/${snippet.id}`)}
-      className="group cursor-pointer rounded-lg border border-white/10 bg-black p-4 transition-all hover:border-emerald-500/50 hover:bg-white/5"
-    >
-      <div className="mb-2 flex items-start justify-between">
-        <div className="flex-1">
-          <h3 className="font-medium text-slate-100 group-hover:text-emerald-400">
-            {snippet.title}
-          </h3>
         </div>
+
         <div className="flex items-center gap-2">
           <button
-            onClick={handleFavoriteClick}
-            className="rounded p-1 transition-colors hover:bg-white/10"
-            title={snippet.is_favorite ? "Remove from favorites" : "Add to favorites"}
+            type="button"
+            onClick={() => router.push("/dashboard/new")}
+            className="flex min-h-[40px] items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-[#050608] transition-colors hover:bg-emerald-400"
           >
-            <FiStar
-              className={`h-4 w-4 ${
-                snippet.is_favorite
-                  ? "fill-yellow-400 text-yellow-400"
-                  : "text-slate-400 hover:text-slate-100"
-              }`}
-            />
+            <FiPlus className="h-4 w-4" />
+            New Snippet
           </button>
-          <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
-            {snippet.language}
-          </span>
+          <button
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            aria-label="Delete folder"
+            title="Delete folder"
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-red-500/25 bg-red-500/10 text-red-400 transition-colors hover:bg-red-500/20"
+          >
+            <FiTrash2 className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
-      {snippet.description && (
-        <p className="mb-3 line-clamp-2 text-xs text-slate-400">
-          {snippet.description}
-        </p>
-      )}
-
-      <CodeBlock
-        code={snippet.code}
-        language={snippet.language}
-        showLineNumbers={false}
-        maxHeight="100px"
-      />
-
-      {snippet.tags && snippet.tags.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1">
-          {snippet.tags.slice(0, 3).map((tag, i) => (
-            <span
-              key={i}
-              className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-500"
-            >
-              {tag}
-            </span>
+      {folderSnippets.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.1] bg-[#0A0D12] px-6 py-16 text-center">
+          <p className="text-sm text-slate-400">No snippets in this folder yet.</p>
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard/new")}
+            className="mt-4 inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-[#050608] hover:bg-emerald-400"
+          >
+            <FiPlus className="h-4 w-4" />
+            Create Snippet
+          </button>
+        </div>
+      ) : (
+        <div
+          className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 ${
+            preferences.density === "compact" ? "gap-3" : "gap-4"
+          }`}
+        >
+          {folderSnippets.map((snippet) => (
+            <SnippetCard
+              key={snippet.id}
+              snippet={snippet}
+              density={preferences.density}
+              folders={folders}
+              onToggleFavorite={(s) => void toggleFavorite(s)}
+              onMoveToFolder={(id, nextFolderId) =>
+                void moveSnippetToFolder(id, nextFolderId)
+              }
+              onRequestDelete={setSnippetToDelete}
+            />
           ))}
         </div>
       )}
 
-      <div className="mt-3 text-xs text-slate-500">
-        {new Date(snippet.created_at).toLocaleDateString()}
-      </div>
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        title="Delete folder"
+        message={`Delete "${folder.name}"? Snippets inside will remain in your vault without a folder.`}
+        confirmText="Delete Folder"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={() => void handleDeleteFolder()}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(snippetToDelete)}
+        title="Archive snippet"
+        message={
+          snippetToDelete
+            ? `Move "${snippetToDelete.title}" to Archive? You can restore it anytime.`
+            : ""
+        }
+        confirmText="Archive"
+        cancelText="Cancel"
+        variant="warning"
+        onConfirm={() => void confirmArchiveSnippet()}
+        onCancel={() => setSnippetToDelete(null)}
+      />
     </div>
   );
 }
-     

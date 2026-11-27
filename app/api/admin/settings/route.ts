@@ -1,42 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { prisma } from "@/lib/prisma";
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "oreo123";
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify admin password
     const password = request.headers.get("x-admin-password");
     if (password !== ADMIN_PASSWORD) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const supabase = await createServerSupabaseClient();
-
-    // Get database statistics
-    const { count: totalLogs } = await supabase
-      .from("logs")
-      .select("*", { count: "exact", head: true });
-
-    const { count: totalUsers } = await supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true });
-
-    const { count: totalSnippets } = await supabase
-      .from("snippets")
-      .select("*", { count: "exact", head: true })
-      .is("deleted_at", null);
-
-    // Get oldest log for uptime calculation
-    const { data: oldestLog } = await supabase
-      .from("logs")
-      .select("created_at")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .single();
+    const [totalLogs, totalUsers, totalSnippets, oldestLog] = await Promise.all([
+      prisma.log.count(),
+      prisma.user.count(),
+      prisma.snippet.count({ where: { deletedAt: null } }),
+      prisma.log.findFirst({
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true },
+      }),
+    ]);
 
     const uptime = oldestLog
-      ? Math.floor((Date.now() - new Date(oldestLog.created_at).getTime()) / 1000 / 60 / 60 / 24)
+      ? Math.floor((Date.now() - new Date(oldestLog.createdAt).getTime()) / 1000 / 60 / 60 / 24)
       : 0;
 
     return NextResponse.json({
@@ -53,18 +38,13 @@ export async function GET(request: NextRequest) {
         sessionTimeout: "24 hours",
       },
     });
-  } catch (error) {
-    console.error("Settings API error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch settings" },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify admin password
     const password = request.headers.get("x-admin-password");
     if (password !== ADMIN_PASSWORD) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -73,46 +53,37 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action } = body;
 
-    const supabase = await createServerSupabaseClient();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     switch (action) {
       case "clear_old_logs": {
-        // Delete logs older than 30 days
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
-        const { error } = await supabase
-          .from("logs")
-          .delete()
-          .lt("created_at", thirtyDaysAgo.toISOString());
-
-        if (error) throw error;
+        await prisma.log.deleteMany({
+          where: { createdAt: { lt: thirtyDaysAgo } },
+        });
         return NextResponse.json({ success: true, message: "Old logs cleared" });
       }
 
       case "clear_deleted_snippets": {
-        // Permanently delete soft-deleted snippets older than 30 days
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
-        const { error } = await supabase
-          .from("snippets")
-          .delete()
-          .not("deleted_at", "is", null)
-          .lt("deleted_at", thirtyDaysAgo.toISOString());
-
-        if (error) throw error;
+        await prisma.snippet.deleteMany({
+          where: {
+            deletedAt: {
+              not: null,
+              lt: thirtyDaysAgo,
+            },
+          },
+        });
         return NextResponse.json({ success: true, message: "Deleted snippets cleared" });
       }
 
       default:
         return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Settings action error:", error);
     return NextResponse.json(
-      { error: "Failed to perform action" },
-      { status: 500 }
+      { error: error.message || "Failed to perform action" },
+      { status: 500 },
     );
   }
 }

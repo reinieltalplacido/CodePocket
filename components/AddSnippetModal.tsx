@@ -110,9 +110,7 @@ export default function AddSnippetModal({
     setLanguage("JavaScript");
     setTagsInput("");
 
-    setTimeout(() => {
-      onSuccess();
-    }, 1000);
+    onSuccess();
   };
 
   const handleClose = () => {

@@ -1,78 +1,70 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { prisma } from "@/lib/prisma";
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "oreo123";
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify admin password
     const password = request.headers.get("x-admin-password");
     if (password !== ADMIN_PASSWORD) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const supabase = await createServerSupabaseClient();
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
     const search = searchParams.get("search") || "";
-    const offset = (page - 1) * limit;
+    const skip = (page - 1) * limit;
 
-    // Build query
-    let query = supabase
-      .from("profiles")
-      .select("*", { count: "exact" });
-
-    // Apply search filter
+    const where: any = {};
     if (search) {
-      query = query.or(`email.ilike.%${search}%,username.ilike.%${search}%`);
+      where.OR = [
+        { email: { contains: search, mode: "insensitive" } },
+        { name: { contains: search, mode: "insensitive" } },
+        { username: { contains: search, mode: "insensitive" } },
+      ];
     }
 
-    // Get users with pagination
-    const { data: users, count: totalUsers } = await query
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1);
+    const [users, totalUsers] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        include: {
+          _count: {
+            select: {
+              snippets: {
+                where: { deletedAt: null },
+              },
+            },
+          },
+        },
+      }),
+      prisma.user.count({ where }),
+    ]);
 
-    if (!users) {
-      return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
-    }
-
-    // Get snippet counts for each user
-    const userIds = users.map(u => u.id);
-    const { data: snippetCounts } = await supabase
-      .from("snippets")
-      .select("user_id")
-      .in("user_id", userIds)
-      .is("deleted_at", null);
-
-    const snippetCountMap: Record<string, number> = {};
-    snippetCounts?.forEach((s: any) => {
-      snippetCountMap[s.user_id] = (snippetCountMap[s.user_id] || 0) + 1;
-    });
-
-    // Enrich user data with email from auth if not in profile
-    const enrichedUsers = users.map(user => ({
-      id: user.id,
-      email: user.email || user.id,
-      username: user.username,
-      created_at: user.created_at,
-      snippet_count: snippetCountMap[user.id] || 0,
+    const formattedUsers = users.map((u) => ({
+      id: u.id,
+      user_id: u.id,
+      email: u.email,
+      username: u.username || u.name,
+      display_name: u.name,
+      avatar_url: u.image,
+      created_at: u.createdAt.toISOString(),
+      snippet_count: u._count.snippets,
     }));
 
     return NextResponse.json({
-      users: enrichedUsers,
+      users: formattedUsers,
       pagination: {
         currentPage: page,
         itemsPerPage: limit,
-        totalItems: totalUsers || 0,
-        totalPages: Math.ceil((totalUsers || 0) / limit),
+        totalItems: totalUsers,
+        totalPages: Math.ceil(totalUsers / limit),
       },
     });
-  } catch (error) {
-    console.error("Users API error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch users" },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -1,186 +1,206 @@
-// components/UserProfileCard.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase-client";
-import Avatar from "./Avatar";
-import { FiCalendar, FiEdit2, FiX, FiLogOut } from "react-icons/fi";
+import { useState } from "react";
+import { FiCalendar, FiCheck, FiCopy, FiEdit2, FiKey, FiLogOut, FiSliders, FiX } from "react-icons/fi";
+import Avatar from "@/components/Avatar";
+import Modal from "@/components/Modal";
+import { useVault } from "@/contexts/VaultContext";
+import { useToast } from "@/contexts/ToastContext";
+import { authClient } from "@/lib/auth-client";
 
 type UserProfileCardProps = {
   isOpen: boolean;
   onClose: () => void;
   onEditProfile: () => void;
-};
-
-type Profile = {
-  username: string | null;
-  display_name: string | null;
-  avatar_url: string | null;
-  bio: string | null;
-  created_at: string;
+  onOpenPreferences?: () => void;
+  onOpenApiKeys?: () => void;
 };
 
 export default function UserProfileCard({
   isOpen,
   onClose,
   onEditProfile,
+  onOpenPreferences,
+  onOpenApiKeys,
 }: UserProfileCardProps) {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  const { user, profile, counts } = useVault();
+  const { showToast } = useToast();
+  const [copiedHandle, setCopiedHandle] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchProfile();
-    }
-  }, [isOpen]);
+  const displayName =
+    profile?.display_name ||
+    profile?.username ||
+    user?.name ||
+    user?.email?.split("@")[0] ||
+    "Developer";
 
-  const fetchProfile = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+  const handle = profile?.username || user?.email?.split("@")[0] || "";
 
-      if (!user) return;
-
-      setUserEmail(user.email || "");
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) return;
-
-      const response = await fetch("/api/profile", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setProfile(data.profile);
-      }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "Recently joined";
+    return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
   };
 
-  const getDisplayName = () => {
-    if (profile?.display_name) return profile.display_name;
-    if (profile?.username) return profile.username;
-    return userEmail.split("@")[0];
+  const handleCopyHandle = async () => {
+    if (!handle) return;
+    try {
+      await navigator.clipboard.writeText(`@${handle}`);
+      setCopiedHandle(true);
+      showToast("Handle copied to clipboard", "success");
+      setTimeout(() => setCopiedHandle(false), 1800);
+    } catch {
+      showToast("Could not copy handle", "error");
+    }
   };
 
-  if (!isOpen) return null;
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await authClient.signOut();
+      window.location.href = "/";
+    } catch {
+      setSigningOut(false);
+      showToast("Failed to sign out", "error");
+    }
+  };
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
+    <Modal isOpen={isOpen} onClose={onClose} size="sm" noBodyPadding>
+      <div className="overflow-hidden">
+        {/* Obsidian Top Strip */}
+        <div className="relative h-24 border-b border-white/[0.08] bg-[#0D1015]">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.16),transparent_65%)]" />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close profile card"
+            className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08] bg-[#050608]/80 text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white"
+          >
+            <FiX className="h-4 w-4" />
+          </button>
+        </div>
 
-      {/* Profile Card */}
-      <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 p-4">
-        <div className="animate-in fade-in zoom-in-95 duration-200 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-zinc-900 to-black shadow-2xl">
-          {/* Header with gradient background */}
-          <div className="relative h-24 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500">
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-            
-            {/* Close button */}
-            <button
-              onClick={onClose}
-              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-all hover:bg-black/60"
-            >
-              <FiX className="h-4 w-4" />
-            </button>
+        {/* Profile Body */}
+        <div className="relative px-6 pb-6">
+          <div className="relative -mt-12 mb-4 flex items-end justify-between">
+            <div className="inline-block rounded-full border border-white/[0.1] bg-[#0A0D12] p-1.5 shadow-xl">
+              <Avatar
+                src={profile?.avatar_url}
+                fallbackText={displayName}
+                size="2xl"
+                className="h-20 w-20 text-xl"
+              />
+            </div>
+
+            {handle && (
+              <button
+                type="button"
+                onClick={() => void handleCopyHandle()}
+                className="mb-1 inline-flex min-h-[34px] items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#0D1015] px-2.5 py-1 font-mono text-xs text-slate-300 transition-colors hover:border-emerald-500/35 hover:text-emerald-300"
+                title="Copy handle"
+              >
+                <span>@{handle}</span>
+                {copiedHandle ? (
+                  <FiCheck className="h-3 w-3 text-emerald-400" />
+                ) : (
+                  <FiCopy className="h-3 w-3 text-slate-400" />
+                )}
+              </button>
+            )}
           </div>
 
-          {/* Profile content */}
-          <div className="relative px-6 pb-6">
-            {/* Avatar */}
-            <div className="relative -mt-16 mb-4">
-              <div className="inline-block rounded-full bg-black p-2">
-                <Avatar
-                  src={profile?.avatar_url || undefined}
-                  fallbackText={getDisplayName()}
-                  size="2xl"
-                  className="ring-4 ring-black"
-                />
-              </div>
-            </div>
-
-            {/* User info */}
-            <div className="mb-4">
-              <h2 className="mb-1 text-2xl font-bold text-white">
-                {getDisplayName()}
-              </h2>
-              {profile?.username && (
-                <p className="text-sm text-slate-400">@{profile.username}</p>
-              )}
-            </div>
-
-            {/* Bio */}
-            {profile?.bio && (
-              <div className="mb-4 rounded-lg bg-white/5 p-3">
-                <p className="text-sm text-slate-300">{profile.bio}</p>
-              </div>
+          <div className="mb-4">
+            <h2 className="font-[family-name:var(--font-bricolage)] text-xl font-bold text-slate-100">
+              {displayName}
+            </h2>
+            {user?.email && (
+              <p className="mt-0.5 text-xs text-slate-400">{user.email}</p>
             )}
+          </div>
 
-            {/* Member since */}
-            <div className="mb-4 rounded-lg border border-white/10 bg-black p-4">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Member Since
-              </h3>
-              <div className="flex items-center gap-2 text-slate-300">
-                <FiCalendar className="h-4 w-4 text-emerald-400" />
-                <span className="text-sm font-medium">
-                  {profile?.created_at
-                    ? formatDate(profile.created_at)
-                    : "Unknown"}
-                </span>
-              </div>
+          {profile?.bio && (
+            <div className="mb-4 rounded-xl border border-white/[0.06] bg-[#050608] px-3.5 py-3">
+              <p className="text-xs leading-relaxed text-slate-300">{profile.bio}</p>
             </div>
+          )}
 
-            {/* Edit Profile button */}
+          {/* Account Metrics */}
+          <div className="mb-5 grid grid-cols-2 gap-2.5">
+            <div className="rounded-xl border border-white/[0.08] bg-[#050608] p-3">
+              <p className="text-[11px] font-medium text-slate-400">Active Snippets</p>
+              <p className="mt-1 font-mono text-base font-semibold text-slate-100">
+                {counts.all}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/[0.08] bg-[#050608] p-3">
+              <p className="text-[11px] font-medium text-slate-400">Member Since</p>
+              <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-slate-200">
+                <FiCalendar className="h-3.5 w-3.5 text-emerald-400" />
+                <span>{formatDate(profile?.created_at)}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="space-y-2">
             <button
+              type="button"
               onClick={() => {
                 onClose();
                 onEditProfile();
               }}
-              className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-black transition-all hover:bg-emerald-400"
+              className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-[#050608] transition-colors hover:bg-emerald-400"
             >
               <FiEdit2 className="h-4 w-4" />
-              Edit Profile
+              Edit Profile &amp; Settings
             </button>
 
-            {/* Logout button */}
+            <div className="grid grid-cols-2 gap-2">
+              {onOpenPreferences && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenPreferences();
+                  }}
+                  className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#0D1015] px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:text-slate-100"
+                >
+                  <FiSliders className="h-3.5 w-3.5" />
+                  Preferences
+                </button>
+              )}
+              {onOpenApiKeys && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenApiKeys();
+                  }}
+                  className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#0D1015] px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:text-slate-100"
+                >
+                  <FiKey className="h-3.5 w-3.5" />
+                  API Keys
+                </button>
+              )}
+            </div>
+
             <button
-              onClick={async () => {
-                await supabase.auth.signOut();
-                window.location.href = "/";
-              }}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-400 transition-all hover:bg-red-500/20"
+              type="button"
+              disabled={signingOut}
+              onClick={() => void handleSignOut()}
+              className="flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg border border-red-500/25 bg-red-500/[0.08] px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-60"
             >
               <FiLogOut className="h-4 w-4" />
-              Log Out
+              {signingOut ? "Signing out..." : "Log Out"}
             </button>
           </div>
         </div>
       </div>
-    </>
+    </Modal>
   );
 }

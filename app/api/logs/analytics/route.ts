@@ -1,112 +1,81 @@
-// app/api/logs/analytics/route.ts
-// API endpoint for fetching analytics data from logs
-
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
-    // Simple password check
     const password = request.headers.get('x-admin-password');
-    if (password !== process.env.ADMIN_PASSWORD) {
+    if (password !== (process.env.ADMIN_PASSWORD || 'oreo123')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get query parameters
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = (page - 1) * limit;
+    const skip = (page - 1) * limit;
 
-    // Build query for logs with pagination
-    let logsQuery = supabaseAdmin
-      .from('logs')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    // Apply filters
+    const where: any = {};
     if (category && category !== 'all') {
-      logsQuery = logsQuery.eq('event_category', category);
+      where.eventCategory = category;
     }
 
-    if (startDate) {
-      logsQuery = logsQuery.gte('created_at', startDate);
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) {
+        where.createdAt.gte = new Date(startDate);
+      }
+      if (endDate) {
+        const endDateTime = new Date(endDate);
+        endDateTime.setDate(endDateTime.getDate() + 1);
+        where.createdAt.lt = endDateTime;
+      }
     }
 
-    if (endDate) {
-      // Add one day to endDate to include the entire day
-      const endDateTime = new Date(endDate);
-      endDateTime.setDate(endDateTime.getDate() + 1);
-      logsQuery = logsQuery.lt('created_at', endDateTime.toISOString());
-    }
+    const [logs, count, categoryGroups] = await Promise.all([
+      prisma.log.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.log.count({ where }),
+      prisma.log.groupBy({
+        by: ['eventCategory'],
+        where,
+        _count: { eventCategory: true },
+      }),
+    ]);
 
-    const { data: logs, error, count } = await logsQuery;
+    const byCategory = categoryGroups.reduce((acc: Record<string, number>, row) => {
+      acc[row.eventCategory] = row._count.eventCategory;
+      return acc;
+    }, {});
 
-    if (error) {
-      console.error('Failed to fetch logs:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch logs' },
-        { status: 500 }
-      );
-    }
+    const recentLogs = logs.map((l) => ({
+      id: l.id,
+      event_type: l.eventType,
+      event_category: l.eventCategory,
+      metadata: l.metadata,
+      user_id: l.userId,
+      ip_address: l.ipAddress,
+      user_agent: l.userAgent,
+      created_at: l.createdAt.toISOString(),
+    }));
 
-    // Get analytics summary (with same filters but no pagination)
-    let summaryQuery = supabaseAdmin
-      .from('logs')
-      .select('event_category, event_type');
-
-    if (category && category !== 'all') {
-      summaryQuery = summaryQuery.eq('event_category', category);
-    }
-
-    if (startDate) {
-      summaryQuery = summaryQuery.gte('created_at', startDate);
-    }
-
-    if (endDate) {
-      const endDateTime = new Date(endDate);
-      endDateTime.setDate(endDateTime.getDate() + 1);
-      summaryQuery = summaryQuery.lt('created_at', endDateTime.toISOString());
-    }
-
-    const { data: summary } = await summaryQuery;
-
-    const analytics = {
-      totalEvents: count || 0,
-      byCategory: summary?.reduce((acc: any, log: any) => {
-        acc[log.event_category] = (acc[log.event_category] || 0) + 1;
-        return acc;
-      }, {}) || {},
-      recentLogs: logs || [],
+    return NextResponse.json({
+      totalEvents: count,
+      byCategory,
+      recentLogs,
       pagination: {
         currentPage: page,
         itemsPerPage: limit,
-        totalItems: count || 0,
-        totalPages: Math.ceil((count || 0) / limit),
+        totalItems: count,
+        totalPages: Math.ceil(count / limit),
       },
-    };
-
-    return NextResponse.json(analytics);
-  } catch (error) {
-    console.error('Error in analytics API:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

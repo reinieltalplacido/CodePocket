@@ -1,877 +1,425 @@
 // app/dashboard/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase-client";
-import { FiPlus, FiSearch, FiCode, FiCopy, FiTrash2, FiStar, FiFolder } from "react-icons/fi";
-import Toast from "@/components/Toast";
-import CodeBlock from "@/components/CodeBlock";
+import { FiCalendar, FiChevronDown, FiCode, FiLayers, FiPlus, FiSearch, FiX } from "react-icons/fi";
+import { useVault, type SnippetRecord } from "@/contexts/VaultContext";
+import { prettyLanguage } from "@/lib/languages";
+import SnippetCard from "@/components/SnippetCard";
+import ConfirmModal from "@/components/ConfirmModal";
 import LoadingState from "@/components/LoadingState";
 import ErrorState from "@/components/ErrorState";
-import { getErrorMessage } from "@/lib/errors";
 
-type Snippet = {
-  id: string;
-  title: string;
-  description: string | null;
-  code: string;
-  language: string;
-  tags: string[] | null;
-  created_at: string;
-  folder_id: string | null;
-  is_favorite?: boolean;
-  source?: string | null;
-  folders?: {
-    id: string;
-    name: string;
-    color: string;
-  } | null;
-};
-
-function prettyLanguage(id: string | undefined): string {
-  if (!id) return "Unknown";
-
-  switch (id) {
-    case "javascript":
-      return "JavaScript";
-    case "typescript":
-      return "TypeScript";
-    case "javascriptreact":
-      return "JSX";
-    case "typescriptreact":
-      return "TSX";
-    case "json":
-      return "JSON";
-    case "plaintext":
-      return "Plain text";
-    default:
-      return id.charAt(0).toUpperCase() + id.slice(1);
-  }
-}
+const DATE_RANGES = [
+  { value: "all", label: "All Time" },
+  { value: "recently", label: "Recently Added" },
+  { value: "today", label: "Today" },
+  { value: "week", label: "Last 7 Days" },
+  { value: "month", label: "Last 30 Days" },
+  { value: "quarter", label: "Last 90 Days" },
+];
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [snippets, setSnippets] = useState<Snippet[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    snippets,
+    folders,
+    loading,
+    error,
+    preferences,
+    refreshAll,
+    toggleFavorite,
+    moveSnippetToFolder,
+    archiveSnippet,
+  } = useVault();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState("all");
   const [selectedDateRange, setSelectedDateRange] = useState("all");
+  const [selectedSource, setSelectedSource] = useState<"all" | "vscode" | "web">("all");
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [snippetToDelete, setSnippetToDelete] = useState<Snippet | null>(null);
-  const [folders, setFolders] = useState<{ id: string; name: string; color: string }[]>([]);
-  const [toast, setToast] = useState<{
-    show: boolean;
-    message: string;
-    type: "success" | "error" | "info";
-  }>({ show: false, message: "", type: "info" });
+  const [snippetToDelete, setSnippetToDelete] = useState<SnippetRecord | null>(null);
 
   useEffect(() => {
-    fetchSnippets();
-    fetchFolders();
-    
-    // Load saved filter preferences from localStorage
-    const savedLanguage = localStorage.getItem('dashboard_language_filter');
-    const savedDateRange = localStorage.getItem('dashboard_date_filter');
-    
-    if (savedLanguage) {
-      setSelectedLanguage(savedLanguage);
-    }
-    if (savedDateRange) {
-      setSelectedDateRange(savedDateRange);
-    }
+    const savedLanguage = localStorage.getItem("dashboard_language_filter");
+    const savedDateRange = localStorage.getItem("dashboard_date_filter");
+    if (savedLanguage) setSelectedLanguage(savedLanguage);
+    if (savedDateRange) setSelectedDateRange(savedDateRange);
   }, []);
 
-  const fetchFolders = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("folders")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("name", { ascending: true });
-
-    if (data) setFolders(data);
-  };
-
-  const handleMoveToFolder = async (snippetId: string, folderId: string | null) => {
-    const { error } = await supabase
-      .from("snippets")
-      .update({ folder_id: folderId })
-      .eq("id", snippetId);
-
-    if (error) {
-      setToast({ show: true, message: error.message, type: "error" });
-      return;
-    }
-
-    setSnippets(prev =>
-      prev.map(s => s.id === snippetId ? { ...s, folder_id: folderId } : s)
-    );
-
-    const folderName = folderId ? folders.find(f => f.id === folderId)?.name : "No folder";
-    setToast({ show: true, message: `Moved to ${folderName || "No folder"}`, type: "success" });
-  };
-
-  // realtime inserts/deletes/updates
   useEffect(() => {
-    const channel = supabase
-      .channel("snippets-dashboard")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "snippets" },
-        (payload) => {
-          setSnippets((prev) => [
-            payload.new as Snippet,
-            ...prev.filter((s) => s.id !== (payload.new as any).id),
-          ]);
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "snippets" },
-        (payload) => {
-          // If snippet was soft deleted (deleted_at is not null), remove from list
-          if ((payload.new as any).deleted_at !== null) {
-            setSnippets((prev) =>
-              prev.filter((s) => s.id !== (payload.new as any).id)
-            );
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "snippets" },
-        (payload) => {
-          setSnippets((prev) =>
-            prev.filter((s) => s.id !== (payload.old as any).id)
-          );
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  const fetchSnippets = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      const { data, error: fetchError } = await supabase
-        .from("snippets")
-        .select(`
-          *,
-          folders (
-            id,
-            name,
-            color
-          )
-        `)
-        .eq("user_id", user.id)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-
-      if (fetchError) throw fetchError;
-
-      setSnippets(data || []);
-    } catch (err) {
-      console.error("Error fetching snippets:", err);
-      setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = () => {
-      setLanguageDropdownOpen(false);
-      setDateDropdownOpen(false);
-    };
-    
-    if (languageDropdownOpen || dateDropdownOpen) {
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
-    }
-  }, [languageDropdownOpen, dateDropdownOpen]);
-
-  // Save language filter preference to localStorage
-  useEffect(() => {
-    localStorage.setItem('dashboard_language_filter', selectedLanguage);
+    localStorage.setItem("dashboard_language_filter", selectedLanguage);
   }, [selectedLanguage]);
 
-  // Save date range filter preference to localStorage
   useEffect(() => {
-    localStorage.setItem('dashboard_date_filter', selectedDateRange);
+    localStorage.setItem("dashboard_date_filter", selectedDateRange);
   }, [selectedDateRange]);
 
-  // Extract unique languages from snippets
-  const uniqueLanguages = Array.from(
-    new Set(snippets.map((s) => s.language))
-  ).sort();
-
-  // Date range options
-  const dateRanges = [
-    { value: "all", label: "All Time" },
-    { value: "recently", label: "Recently Added" },
-    { value: "today", label: "Today" },
-    { value: "week", label: "Last 7 Days" },
-    { value: "month", label: "Last 30 Days" },
-    { value: "quarter", label: "Last 90 Days" },
-  ];
-
-  // Filter snippets by search, language, and date range
-  const filteredSnippets = snippets
-    .filter((s) => {
-      // Search filter
-      const matchesSearch =
-        s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.code.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      // Language filter
-      const matchesLanguage =
-        selectedLanguage === "all" || s.language === selectedLanguage;
-      
-      // Date range filter
-      let matchesDateRange = true;
-      if (selectedDateRange !== "all") {
-        const now = new Date();
-        const snippetDate = new Date(s.created_at);
-        const daysDiff = Math.floor(
-          (now.getTime() - snippetDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-
-        switch (selectedDateRange) {
-          case "today":
-            matchesDateRange = daysDiff === 0;
-            break;
-          case "week":
-            matchesDateRange = daysDiff <= 7;
-            break;
-          case "month":
-            matchesDateRange = daysDiff <= 30;
-            break;
-          case "quarter":
-            matchesDateRange = daysDiff <= 90;
-            break;
-          case "recently":
-            // Recently added will be handled by sorting
-            matchesDateRange = true;
-            break;
-        }
+  useEffect(() => {
+    if (!languageDropdownOpen && !dateDropdownOpen) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLanguageDropdownOpen(false);
+        setDateDropdownOpen(false);
       }
+    };
+    document.addEventListener("keydown", onEsc);
+    return () => document.removeEventListener("keydown", onEsc);
+  }, [languageDropdownOpen, dateDropdownOpen]);
 
-      return matchesSearch && matchesLanguage && matchesDateRange;
-    })
-    .sort((a, b) => {
-      // Sort by recently added if selected
-      if (selectedDateRange === "recently") {
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      }
-      // Default sort (already sorted by created_at desc from query)
-      return 0;
-    });
-
-  const openConfirm = (snippet: Snippet) => {
-    setSnippetToDelete(snippet);
-    setConfirmOpen(true);
-  };
-
-  const closeConfirm = () => {
-    setConfirmOpen(false);
-    setSnippetToDelete(null);
-  };
-
-  const confirmDelete = async () => {
-  if (!snippetToDelete) return;
-
-  const snippetTitle = snippetToDelete.title;
-
-  // Soft delete: set deleted_at to current timestamp
-  const { error } = await supabase
-    .from("snippets")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", snippetToDelete.id);
-
-  if (error) {
-    console.error(error);
-    setToast({
-      show: true,
-      message: "Failed to archive snippet",
-      type: "error",
-    });
-  } else {
-    setToast({
-      show: true,
-      message: `"${snippetTitle}" moved to Archive`,
-      type: "success",
-    });
-  }
-
-  closeConfirm(); // modal closes; realtime will update list
-};
-
-const toggleFavorite = async (snippet: Snippet) => {
-  const newFavoriteState = !snippet.is_favorite;
-
-  // Optimistic update
-  setSnippets((prev) =>
-    prev.map((s) =>
-      s.id === snippet.id ? { ...s, is_favorite: newFavoriteState } : s
-    )
+  const uniqueLanguages = useMemo(
+    () => Array.from(new Set(snippets.map((s) => s.language))).sort(),
+    [snippets]
   );
 
-  const { error } = await supabase
-    .from("snippets")
-    .update({ is_favorite: newFavoriteState })
-    .eq("id", snippet.id);
+  const hasActiveFilters =
+    selectedLanguage !== "all" ||
+    selectedDateRange !== "all" ||
+    selectedSource !== "all" ||
+    searchQuery.trim().length > 0;
 
-  if (error) {
-    // Revert on error
-    setSnippets((prev) =>
-      prev.map((s) =>
-        s.id === snippet.id ? { ...s, is_favorite: !newFavoriteState } : s
-      )
-    );
-    setToast({
-      show: true,
-      message: "Failed to update favorite",
-      type: "error",
-    });
-  } else {
-    setToast({
-      show: true,
-      message: newFavoriteState ? "Added to favorites" : "Removed from favorites",
-      type: "success",
-    });
-  }
-};
+  const filteredSnippets = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const nowMs = Date.now();
 
+    return snippets
+      .filter((s) => {
+        const matchesSearch =
+          !q ||
+          s.title.toLowerCase().includes(q) ||
+          s.code.toLowerCase().includes(q) ||
+          (s.description?.toLowerCase().includes(q) ?? false) ||
+          (Array.isArray(s.tags) && s.tags.some((t) => t.toLowerCase().includes(q)));
+
+        const matchesLanguage =
+          selectedLanguage === "all" || s.language === selectedLanguage;
+
+        const matchesSource =
+          selectedSource === "all" ||
+          (selectedSource === "vscode"
+            ? s.source === "vscode"
+            : s.source !== "vscode");
+
+        let matchesDateRange = true;
+        if (selectedDateRange !== "all" && selectedDateRange !== "recently") {
+          const daysDiff = Math.floor(
+            (nowMs - new Date(s.created_at).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          if (selectedDateRange === "today") matchesDateRange = daysDiff === 0;
+          else if (selectedDateRange === "week") matchesDateRange = daysDiff <= 7;
+          else if (selectedDateRange === "month") matchesDateRange = daysDiff <= 30;
+          else if (selectedDateRange === "quarter") matchesDateRange = daysDiff <= 90;
+        }
+
+        return matchesSearch && matchesLanguage && matchesSource && matchesDateRange;
+      })
+      .sort((a, b) => {
+        if (selectedDateRange === "recently") {
+          return (
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+        }
+        return 0;
+      });
+  }, [searchQuery, selectedDateRange, selectedLanguage, selectedSource, snippets]);
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setSelectedLanguage("all");
+    setSelectedDateRange("all");
+    setSelectedSource("all");
+  };
+
+  const confirmArchive = async () => {
+    if (!snippetToDelete) return;
+    const target = snippetToDelete;
+    setSnippetToDelete(null);
+    await archiveSnippet(target);
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-100 md:text-2xl">
+          <h2 className="font-[family-name:var(--font-bricolage)] text-xl font-semibold tracking-tight text-slate-100 md:text-2xl">
             Your snippets
-          </h1>
-          <p className="mt-1 text-sm text-slate-400 whitespace-nowrap">
-            {snippets.length} snippet{snippets.length !== 1 ? "s" : ""} saved
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-400">
+            {filteredSnippets.length} of {snippets.length} snippet
+            {snippets.length !== 1 ? "s" : ""} shown
           </p>
         </div>
+
         <button
+          type="button"
           onClick={() => router.push("/dashboard/new")}
-          className="flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 sm:w-auto"
+          className="flex min-h-[42px] items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-[#050608] transition-colors hover:bg-emerald-400 sm:w-auto"
         >
           <FiPlus className="h-4 w-4" />
           New Snippet
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <FiSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Search snippets..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full rounded-lg border border-white/10 bg-black py-2.5 pl-10 pr-4 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
-        />
-      </div>
+      {/* Search + Filters Bar */}
+      <div className="flex flex-col gap-3 rounded-xl border border-white/[0.08] bg-[#090B0E] p-3">
+        <div className="relative">
+          <FiSearch className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by title, code, description, or tag..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="min-h-[42px] w-full rounded-lg border border-white/[0.08] bg-[#050608] py-2 pl-10 pr-10 text-sm text-slate-100 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              aria-label="Clear search query"
+              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 hover:bg-white/[0.08] hover:text-slate-100"
+            >
+              <FiX className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* Language Filter */}
           <div className="relative">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setLanguageDropdownOpen(!languageDropdownOpen);
+              type="button"
+              onClick={() => {
+                setLanguageDropdownOpen((v) => !v);
                 setDateDropdownOpen(false);
               }}
-              className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 transition-all hover:border-emerald-500/30 hover:bg-white/10"
+              aria-expanded={languageDropdownOpen}
+              className="flex min-h-[38px] items-center gap-2 rounded-lg border border-white/[0.08] bg-[#0D1015] px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-white/20"
             >
-              <FiCode className="h-4 w-4" />
+              <FiCode className="h-3.5 w-3.5 text-emerald-400" />
               <span>
                 {selectedLanguage === "all"
                   ? "All Languages"
                   : prettyLanguage(selectedLanguage)}
               </span>
-              <svg
-                className={`h-4 w-4 transition-transform ${
+              <FiChevronDown
+                className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
                   languageDropdownOpen ? "rotate-180" : ""
                 }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
+              />
             </button>
 
             {languageDropdownOpen && (
-              <div className="absolute left-0 top-full z-50 mt-2 w-56 rounded-lg border border-white/10 bg-zinc-950 shadow-xl">
-                <div className="max-h-64 overflow-y-auto p-1">
-                  <button
-                    onClick={() => {
-                      setSelectedLanguage("all");
-                      setLanguageDropdownOpen(false);
-                    }}
-                    className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                      selectedLanguage === "all"
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : "text-slate-300 hover:bg-white/5"
-                    }`}
-                  >
-                    All Languages
-                    <span className="ml-2 text-xs text-slate-500">
-                      ({snippets.length})
-                    </span>
-                  </button>
-                  {uniqueLanguages.map((lang) => {
-                    const count = snippets.filter((s) => s.language === lang).length;
-                    return (
-                      <button
-                        key={lang}
-                        onClick={() => {
-                          setSelectedLanguage(lang);
-                          setLanguageDropdownOpen(false);
-                        }}
-                        className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                          selectedLanguage === lang
-                            ? "bg-emerald-500/20 text-emerald-400"
-                            : "text-slate-300 hover:bg-white/5"
-                        }`}
-                      >
-                        {prettyLanguage(lang)}
-                        <span className="ml-2 text-xs text-slate-500">
-                          ({count})
-                        </span>
-                      </button>
-                    );
-                  })}
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setLanguageDropdownOpen(false)}
+                />
+                <div className="cp-dropdown-in absolute left-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-xl border border-white/[0.1] bg-[#0D1015] p-1 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.9)]">
+                  <div className="custom-scrollbar max-h-64 overflow-y-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedLanguage("all");
+                        setLanguageDropdownOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                        selectedLanguage === "all"
+                          ? "bg-emerald-500/15 text-emerald-300"
+                          : "text-slate-300 hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <span>All Languages</span>
+                      <span className="font-mono text-slate-400">
+                        {snippets.length}
+                      </span>
+                    </button>
+                    {uniqueLanguages.map((lang) => {
+                      const count = snippets.filter((s) => s.language === lang).length;
+                      return (
+                        <button
+                          key={lang}
+                          type="button"
+                          onClick={() => {
+                            setSelectedLanguage(lang);
+                            setLanguageDropdownOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                            selectedLanguage === lang
+                              ? "bg-emerald-500/15 text-emerald-300"
+                              : "text-slate-300 hover:bg-white/[0.06]"
+                          }`}
+                        >
+                          <span>{prettyLanguage(lang)}</span>
+                          <span className="font-mono text-slate-400">{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
 
-          {/* Date Range Filter */}
+          {/* Date Filter */}
           <div className="relative">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setDateDropdownOpen(!dateDropdownOpen);
+              type="button"
+              onClick={() => {
+                setDateDropdownOpen((v) => !v);
                 setLanguageDropdownOpen(false);
               }}
-              className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 transition-all hover:border-emerald-500/30 hover:bg-white/10"
+              aria-expanded={dateDropdownOpen}
+              className="flex min-h-[38px] items-center gap-2 rounded-lg border border-white/[0.08] bg-[#0D1015] px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-white/20"
             >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
+              <FiCalendar className="h-3.5 w-3.5 text-slate-400" />
               <span>
-                {dateRanges.find((d) => d.value === selectedDateRange)?.label ||
+                {DATE_RANGES.find((d) => d.value === selectedDateRange)?.label ||
                   "All Time"}
               </span>
-              <svg
-                className={`h-4 w-4 transition-transform ${
+              <FiChevronDown
+                className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
                   dateDropdownOpen ? "rotate-180" : ""
                 }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
+              />
             </button>
 
             {dateDropdownOpen && (
-              <div className="absolute left-0 top-full z-50 mt-2 w-48 rounded-lg border border-white/10 bg-zinc-950 shadow-xl">
-                <div className="p-1">
-                  {dateRanges.map((range) => (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setDateDropdownOpen(false)}
+                />
+                <div className="cp-dropdown-in absolute left-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-xl border border-white/[0.1] bg-[#0D1015] p-1 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.9)]">
+                  {DATE_RANGES.map((range) => (
                     <button
                       key={range.value}
+                      type="button"
                       onClick={() => {
                         setSelectedDateRange(range.value);
                         setDateDropdownOpen(false);
                       }}
-                      className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                      className={`w-full rounded-lg px-3 py-2 text-left text-xs transition-colors ${
                         selectedDateRange === range.value
-                          ? "bg-emerald-500/20 text-emerald-400"
-                          : "text-slate-300 hover:bg-white/5"
+                          ? "bg-emerald-500/15 text-emerald-300"
+                          : "text-slate-300 hover:bg-white/[0.06]"
                       }`}
                     >
                       {range.label}
                     </button>
                   ))}
                 </div>
-              </div>
+              </>
             )}
           </div>
 
-          {/* Clear Filters Button */}
-          {(selectedLanguage !== "all" || selectedDateRange !== "all") && (
-            <button
-              onClick={() => {
-                setSelectedLanguage("all");
-                setSelectedDateRange("all");
-              }}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-400 transition-all hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+          {/* Source Filter Pills */}
+          <div className="flex items-center rounded-lg border border-white/[0.08] bg-[#0D1015] p-0.5">
+            {(["all", "vscode", "web"] as const).map((src) => (
+              <button
+                key={src}
+                type="button"
+                onClick={() => setSelectedSource(src)}
+                className={`min-h-[32px] rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  selectedSource === src
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-              Clear Filters
+                {src === "all" ? "All Sources" : src === "vscode" ? "VS Code" : "Web"}
+              </button>
+            ))}
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="ml-auto inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#0D1015] px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-red-500/35 hover:bg-red-500/10 hover:text-red-300"
+            >
+              <FiX className="h-3.5 w-3.5" />
+              Clear filters
             </button>
           )}
         </div>
-
-        {/* Active Filters Display */}
-        {(selectedLanguage !== "all" || selectedDateRange !== "all") && (
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-500">Active filters:</span>
-            {selectedLanguage !== "all" && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-emerald-400">
-                <FiCode className="h-3 w-3" />
-                {prettyLanguage(selectedLanguage)}
-                <button
-                  onClick={() => setSelectedLanguage("all")}
-                  className="ml-0.5 hover:text-emerald-300"
-                >
-                  ×
-                </button>
-              </span>
-            )}
-            {selectedDateRange !== "all" && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5 py-1 text-sky-400">
-                <svg
-                  className="h-3 w-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
-                {dateRanges.find((d) => d.value === selectedDateRange)?.label}
-                <button
-                  onClick={() => setSelectedDateRange("all")}
-                  className="ml-0.5 hover:text-sky-300"
-                >
-                  ×
-                </button>
-              </span>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* Snippets Grid */}
+      {/* Snippets Content */}
       {loading ? (
         <LoadingState message="Loading your snippets..." />
       ) : error ? (
-        <ErrorState message={error} onRetry={fetchSnippets} />
+        <ErrorState message={error} onRetry={() => void refreshAll()} />
       ) : filteredSnippets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 py-16">
-          <FiCode className="mb-3 h-12 w-12 text-slate-600" />
-          <h3 className="mb-1 text-lg font-semibold text-slate-300">
-            {searchQuery ? "No snippets found" : "No snippets yet"}
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.1] bg-[#0A0D12] px-6 py-16 text-center">
+          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-white/[0.08] bg-[#0D1015]">
+            <FiLayers className="h-6 w-6 text-slate-400" />
+          </div>
+          <h3 className="text-base font-semibold text-slate-200">
+            {hasActiveFilters ? "No matching snippets" : "Your vault is ready"}
           </h3>
-          <p className="mb-4 text-sm text-slate-500">
-            {searchQuery
-              ? "Try a different search term"
-              : "Create your first snippet to get started"}
+          <p className="mt-1 max-w-md text-sm text-slate-400">
+            {hasActiveFilters
+              ? "Try clearing your search query or filters to view all saved snippets."
+              : "Create a snippet directly on the web or generate an API key in Profile Settings to sync from VS Code."}
           </p>
-          {!searchQuery && (
-            <button
-              onClick={() => router.push("/dashboard/new")}
-              className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:bg-emerald-400"
-            >
-              <FiPlus className="h-4 w-4" />
-              New Snippet
-            </button>
-          )}
+          <div className="mt-5 flex flex-wrap justify-center gap-2.5">
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="min-h-[40px] rounded-lg border border-white/[0.1] bg-[#0D1015] px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.06]"
+              >
+                Reset Filters
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/new")}
+                className="inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-[#050608] hover:bg-emerald-400"
+              >
+                <FiPlus className="h-4 w-4" />
+                Create First Snippet
+              </button>
+            )}
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 ${
+            preferences.density === "compact" ? "gap-3" : "gap-4"
+          }`}
+        >
           {filteredSnippets.map((snippet) => (
             <SnippetCard
               key={snippet.id}
               snippet={snippet}
-              onRequestDelete={openConfirm}
-              onToggleFavorite={toggleFavorite}
-              onMoveToFolder={handleMoveToFolder}
+              density={preferences.density}
               folders={folders}
+              onToggleFavorite={(s) => void toggleFavorite(s)}
+              onMoveToFolder={(id, folderId) => void moveSnippetToFolder(id, folderId)}
+              onRequestDelete={setSnippetToDelete}
             />
           ))}
         </div>
       )}
 
-      {/* Confirm delete modal */}
-      {confirmOpen && snippetToDelete && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-sm rounded-lg border border-white/10 bg-zinc-950 p-5 shadow-xl">
-            <h2 className="text-sm font-semibold text-slate-100">
-              Archive snippet
-            </h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Are you sure you want to archive{" "}
-              <span className="font-semibold text-slate-100">
-                {snippetToDelete.title}
-              </span>
-              ? You can restore it from the Archive later.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={closeConfirm}
-                className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/5"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-amber-400"
-              >
-                Archive
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast notification */}
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        isVisible={toast.show}
-        onClose={() => setToast({ ...toast, show: false })}
+      {/* Animated Archive Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(snippetToDelete)}
+        title="Archive snippet"
+        message={
+          snippetToDelete
+            ? `Move "${snippetToDelete.title}" to Archive? You can restore it anytime.`
+            : ""
+        }
+        confirmText="Archive"
+        cancelText="Cancel"
+        variant="warning"
+        onConfirm={() => void confirmArchive()}
+        onCancel={() => setSnippetToDelete(null)}
       />
-    </div>
-  );
-}
-
-function SnippetCard({
-  snippet,
-  onRequestDelete,
-  onToggleFavorite,
-  onMoveToFolder,
-  folders,
-}: {
-  snippet: Snippet;
-  onRequestDelete: (snippet: Snippet) => void;
-  onToggleFavorite: (snippet: Snippet) => void;
-  onMoveToFolder: (snippetId: string, folderId: string | null) => void;
-  folders: { id: string; name: string; color: string }[];
-}) {
-  const router = useRouter();
-  const tags = Array.isArray(snippet.tags) ? snippet.tags : [];
-  const [showFolderDropdown, setShowFolderDropdown] = useState(false);
-
-  const handleOpen = () => {
-    router.push(`/dashboard/snippet/${snippet.id}`);
-  };
-
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    await navigator.clipboard.writeText(snippet.code);
-  };
-
-  const handleFavoriteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onToggleFavorite(snippet);
-  };
-
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onRequestDelete(snippet);
-  };
-
-  return (
-    <div className="relative group">
-      {/* Icon actions pinned on top border, right side, only on hover */}
-      <div className="pointer-events-none absolute top-0 right-0 flex justify-end pr-4">
-        <div className="mt-[-0.6rem] flex gap-1 rounded-full bg-black/80 px-1.5 py-1 shadow-sm opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            onClick={handleFavoriteClick}
-            className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-xs hover:bg-black"
-            title={snippet.is_favorite ? "Remove from favorites" : "Add to favorites"}
-          >
-            <FiStar className={`h-3.5 w-3.5 ${
-              snippet.is_favorite
-                ? "fill-yellow-400 text-yellow-400"
-                : "text-slate-100"
-            }`} />
-          </button>
-          <button
-            onClick={handleCopy}
-            className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-xs text-slate-100 hover:bg-black"
-            title="Copy code"
-          >
-            <FiCopy className="h-3.5 w-3.5" />
-          </button>
-          <div className="relative">
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowFolderDropdown(!showFolderDropdown); }}
-              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-xs text-slate-100 hover:bg-black"
-              title="Move to folder"
-            >
-              <FiFolder className="h-3.5 w-3.5" />
-            </button>
-            {showFolderDropdown && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowFolderDropdown(false); }} />
-                <div className="absolute right-0 z-50 mt-1 w-48 rounded-lg border border-white/10 bg-zinc-950 shadow-xl" onClick={(e) => e.stopPropagation()}>
-                  <div className="max-h-48 overflow-y-auto py-1">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onMoveToFolder(snippet.id, null); setShowFolderDropdown(false); }}
-                      className={`w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-white/5 ${
-                        !snippet.folder_id ? "text-emerald-400" : "text-slate-300"
-                      }`}
-                    >
-                      {!snippet.folder_id && "✓ "}<span className="text-slate-500">No Folder</span>
-                    </button>
-                    {folders.map((folder) => (
-                      <button
-                        key={folder.id}
-                        onClick={(e) => { e.stopPropagation(); onMoveToFolder(snippet.id, folder.id); setShowFolderDropdown(false); }}
-                        className={`w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-white/5 ${
-                          snippet.folder_id === folder.id ? "text-emerald-400" : "text-slate-300"
-                        }`}
-                      >
-                        {snippet.folder_id === folder.id && "✓ "}{folder.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-          <button
-            onClick={handleDeleteClick}
-            className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-xs text-red-400 hover:bg-red-500/20"
-            title="Delete snippet"
-          >
-            <FiTrash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
-
-      <div
-        onClick={handleOpen}
-        className="cursor-pointer rounded-lg border border-white/10 bg-white/5 p-3 pt-4 sm:p-4 sm:pt-5 transition-all hover:border-emerald-500/30 hover:bg-white/10 h-[380px] flex flex-col"
-      >
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <div className="space-y-1 flex-1 min-w-0">
-            <h3 className="font-medium text-slate-100 line-clamp-1">
-              {snippet.title}
-            </h3>
-
-            {/* Folder + tags row */}
-            <div className="flex flex-wrap gap-1 text-[11px] text-slate-400">
-              {snippet.folders && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5">
-                  <span className="text-xs">📁</span>
-                  <span>{snippet.folders.name}</span>
-                </span>
-              )}
-
-              {tags.slice(0, 2).map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5"
-                >
-                  <span className="text-xs">🏷️</span>
-                  <span>{tag}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col items-end gap-1 flex-shrink-0">
-            <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
-              {prettyLanguage(snippet.language)}
-            </span>
-
-            {snippet.source && (
-              <span className="rounded bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300">
-                {snippet.source === "vscode" ? "VS Code" : "Web"}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {snippet.description && (
-          <div className="mb-3">
-            <p className="line-clamp-2 text-xs text-slate-400">
-              {snippet.description}
-            </p>
-          </div>
-        )}
-        <div className="mb-3 h-[180px] sm:h-[240px]">
-          <CodeBlock
-            code={snippet.code}
-            language={snippet.language}
-            showLineNumbers={false}
-            maxHeight="240px"
-            className="text-xs sm:text-sm h-full"
-          />
-        </div>
-        <div className="text-xs text-slate-500 mt-auto">
-          {new Date(snippet.created_at).toLocaleDateString()}
-        </div>
-      </div>
     </div>
   );
 }

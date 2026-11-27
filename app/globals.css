@@ -1,22 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050608;
+  --foreground: #f8fafc;
+  --obsidian-surface: #0a0d12;
+  --vault-obsidian: #090b0e;
+  --vault-chrome: #0d1015;
+  --vault-card: #11151b;
+  --vault-emerald: #10b981;
+  --vault-emerald-bright: #34d399;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --font-display: var(--font-bricolage);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
+  background-color: #050608;
 }
 
 body {
@@ -25,27 +30,156 @@ body {
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Custom scrollbar styles */
+::selection {
+  background-color: rgba(16, 185, 129, 0.28);
+  color: #f8fafc;
+}
+
+:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
+/* Custom obsidian scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
+  background: transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(16, 185, 129, 0.3); /* emerald-500 */
-  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.24);
+  border-radius: 9999px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(16, 185, 129, 0.6); /* emerald-500 brighter */
+  background: rgba(16, 185, 129, 0.55);
 }
 
-/* Firefox scrollbar */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(16, 185, 129, 0.3) rgba(0, 0, 0, 0.3);
+  scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+}
+
+/* Keyframes for overlays, modals, dropdowns, and top toasts */
+@keyframes cpBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cpBackdropOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes cpModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes cpModalOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
+@keyframes cpDropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes cpToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes cpToastOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+}
+
+.cp-backdrop-in {
+  animation: cpBackdropIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cp-backdrop-out {
+  animation: cpBackdropOut 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cp-modal-in {
+  animation: cpModalIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cp-modal-out {
+  animation: cpModalOut 160ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.cp-dropdown-in {
+  animation: cpDropdownIn 160ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cp-toast-in {
+  animation: cpToastIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cp-toast-out {
+  animation: cpToastOut 160ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.cp-card-render {
+  content-visibility: auto;
+  contain-intrinsic-size: 320px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-backdrop-in,
+  .cp-backdrop-out,
+  .cp-modal-in,
+  .cp-modal-out,
+  .cp-dropdown-in,
+  .cp-toast-in,
+  .cp-toast-out {
+    animation-duration: 1ms !important;
+    transform: none !important;
+  }
 }

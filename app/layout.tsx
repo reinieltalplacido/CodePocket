@@ -1,7 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
+import { ToastProvider } from "@/contexts/ToastContext";
 import "./globals.css";
+
+const bricolageDisplay = Bricolage_Grotesque({
+  variable: "--font-bricolage",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,7 +23,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://code-pocket.vercel.app"),
   title: "CodePocket",
-  description: "Save, organize, and access your favorite code snippets from anywhere. Built with Next.js, TypeScript, and Supabase.",
+  description: "Save, organize, and access your favorite code snippets from anywhere. Built with Next.js, TypeScript, Prisma, and Neon.",
+  icons: {
+    icon: "/Glossy Green Code Pocket Icon.png",
+    apple: "/Glossy Green Code Pocket Icon.png",
+  },
   keywords: ["code snippets", "snippet manager", "developer tools", "code organization", "vscode extension"],
   authors: [{ name: "Reiniel" }],
   openGraph: {
@@ -50,9 +61,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${bricolageDisplay.variable} ${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <ToastProvider>
+          {children}
+        </ToastProvider>
         <Analytics />
       </body>
     </html>

@@ -1,6 +1,7 @@
 // components/Avatar.tsx
 "use client";
 
+import { useState } from "react";
 import { FiUser } from "react-icons/fi";
 
 type AvatarProps = {
@@ -26,6 +27,8 @@ export default function Avatar({
   fallbackText,
   className = "",
 }: AvatarProps) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+
   const getInitials = (text?: string) => {
     if (!text) return "";
     const parts = text.trim().split(" ");
@@ -36,19 +39,20 @@ export default function Avatar({
   };
 
   const initials = getInitials(fallbackText);
+  const showImage = Boolean(src) && failedSrc !== src;
 
   return (
     <div
       className={`relative flex items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 ${sizeClasses[size]} ${className}`}
     >
-      {src ? (
+      {showImage && src ? (
         <img
           src={src}
           alt={alt}
+          referrerPolicy="no-referrer"
           className="h-full w-full object-cover"
-          onError={(e) => {
-            // Hide image on error and show fallback
-            e.currentTarget.style.display = "none";
+          onError={() => {
+            setFailedSrc(src);
           }}
         />
       ) : initials ? (

@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, FormEvent } from "react";
-import { supabase } from "@/lib/supabase-client";
 import Modal from "@/components/Modal";
-import Toast from "@/components/Toast";
+import { useToast } from "@/contexts/ToastContext";
+import { useVault } from "@/contexts/VaultContext";
 
 type AddFolderModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess?: () => void;
 };
 
 const COLORS = [
@@ -25,41 +25,27 @@ export default function AddFolderModal({
   onClose,
   onSuccess,
 }: AddFolderModalProps) {
+  const { showToast } = useToast();
+  const { createFolder } = useVault();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState("emerald");
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<{
-    show: boolean;
-    message: string;
-    type: "success" | "error" | "info";
-  }>({ show: false, message: "", type: "info" });
+  const [fieldError, setFieldError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     if (!name.trim()) {
-      setToast({
-        show: true,
-        message: "Folder name is required",
-        type: "error",
-      });
+      setFieldError("Folder name is required");
+      showToast("Folder name is required", "error");
       return;
     }
 
+    setFieldError(null);
     setLoading(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    const { error } = await supabase.from("folders").insert({
-      user_id: user.id,
+    const res = await createFolder({
       name: name.trim(),
       description: description.trim() || null,
       color,
@@ -67,32 +53,21 @@ export default function AddFolderModal({
 
     setLoading(false);
 
-    if (error) {
-      setToast({
-        show: true,
-        message: error.message,
-        type: "error",
-      });
+    if (!res.ok) {
+      setFieldError(res.error || "Failed to create folder");
+      showToast(res.error || "Failed to create folder", "error");
       return;
     }
 
-    setToast({
-      show: true,
-      message: "Folder created successfully!",
-      type: "success",
-    });
-
-    // Reset form
     setName("");
     setDescription("");
     setColor("emerald");
-
-    setTimeout(() => {
-      onSuccess();
-    }, 1000);
+    onSuccess?.();
+    onClose();
   };
 
   const handleClose = () => {
+    setFieldError(null);
     setName("");
     setDescription("");
     setColor("emerald");
@@ -100,85 +75,95 @@ export default function AddFolderModal({
   };
 
   return (
-    <>
-      <Modal isOpen={isOpen} onClose={handleClose} title="Create New Folder" size="md">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name */}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-300">
-              Folder Name <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., React Hooks"
-              className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
-            />
-          </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="New Folder"
+      subtitle="Organize snippets by project, framework, or workflow."
+      size="md"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label
+            htmlFor="folder-name"
+            className="mb-1.5 block text-xs font-medium text-slate-300"
+          >
+            Folder Name <span className="text-red-400">*</span>
+          </label>
+          <input
+            id="folder-name"
+            type="text"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (fieldError) setFieldError(null);
+            }}
+            placeholder="e.g., Auth Helpers"
+            autoFocus
+            className="min-h-[42px] w-full rounded-lg border border-white/[0.1] bg-[#050608] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none"
+          />
+          {fieldError && (
+            <p className="mt-1.5 text-xs text-red-400">{fieldError}</p>
+          )}
+        </div>
 
-          {/* Description */}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-300">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description..."
-              rows={2}
-              className="w-full resize-none rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/60 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2"
-            />
-          </div>
+        <div>
+          <label
+            htmlFor="folder-desc"
+            className="mb-1.5 block text-xs font-medium text-slate-300"
+          >
+            Description
+          </label>
+          <textarea
+            id="folder-desc"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional notes for this collection..."
+            rows={2}
+            className="w-full resize-none rounded-lg border border-white/[0.1] bg-[#050608] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none"
+          />
+        </div>
 
-          {/* Color */}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-300">
-              Color
-            </label>
-            <div className="flex gap-2">
-              {COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  type="button"
-                  onClick={() => setColor(c.value)}
-                  className={`h-8 w-8 rounded-full ${c.class} transition-all ${
-                    color === c.value
-                      ? "ring-2 ring-white ring-offset-2 ring-offset-black"
-                      : "opacity-50 hover:opacity-100"
-                  }`}
-                  title={c.name}
-                />
-              ))}
-            </div>
+        <div>
+          <span className="mb-2 block text-xs font-medium text-slate-300">
+            Folder Color
+          </span>
+          <div className="flex flex-wrap gap-2.5">
+            {COLORS.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => setColor(c.value)}
+                aria-label={`Select ${c.name} color`}
+                aria-pressed={color === c.value}
+                className={`h-9 w-9 rounded-full ${c.class} transition-all ${
+                  color === c.value
+                    ? "scale-105 ring-2 ring-white ring-offset-2 ring-offset-[#0A0D12]"
+                    : "opacity-55 hover:opacity-100"
+                }`}
+                title={c.name}
+              />
+            ))}
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-2 pt-4">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "Creating..." : "Create Folder"}
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        isVisible={toast.show}
-        onClose={() => setToast({ ...toast, show: false })}
-      />
-    </>
+        <div className="flex flex-col-reverse gap-2 border-t border-white/[0.08] pt-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={handleClose}
+            className="min-h-[40px] rounded-lg border border-white/[0.1] bg-[#0D1015] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.06]"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="min-h-[40px] rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-[#050608] transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Creating..." : "Create Folder"}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
